@@ -1,0 +1,10 @@
+# Other
+math/*
+
+# Build
+ffxiv_stats.egg-info/
+build/*
+dist/*
+
+# Runtime
+__pycache__/
