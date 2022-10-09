@@ -166,6 +166,13 @@ class BaseStats(Rotation):
         pass
 
     def auto_attack_d2(self, potency, ap_adjust=0):
+        """
+        Get base damage of an auto-attack before any variability.
+
+        inputs:
+        potency - int, potency of an attack
+        ap_adjust - int, amount of main stat to add. Used to account for medication. 
+        """
         auto_d1 = nf(nf(nf(potency * self.f_atk(ap_adjust) * self.f_det()) / 100) / 1000)
         auto_d2 = nf(nf(nf(nf(nf(nf(nf(nf(auto_d1 * self.f_ten()) / 1000) * self.f_speed_auto()) / 1000) * self.f_auto()) / 100) * self.trait) / 100)
         return auto_d2
@@ -192,13 +199,28 @@ class BaseStats(Rotation):
             return nf(nf(nf(nf(nf(nf(nf(nf(dot_d1 * self.f_ten()) / 1000) * self.f_speed_dot()) / 1000) * self.f_wd()) / 100) * self.trait) / 100) + 1
 
 class Healer(BaseStats):
-    """
-    Set healer-specific stats with this class like main stat, traits, etc.
-    """
     def __init__(self, mind, intelligence, vitality, strength, dexterity, det, 
-                 skill_speed, spell_speed, tenacity, crit_stat, dh_stat, wep_dmg_stat, delay) -> None:
-        
-        super().__init__(mind, 130, mind, mind, intelligence, vitality, strength,dexterity, det, tenacity, crit_stat, dh_stat, spell_speed, skill_speed, wep_dmg_stat, delay)
+                 skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+        """
+        Set healer-specific stats with this class like main stat, traits, etc.
+
+        inputs:
+        mind - int, mind stat
+        intelligence - int, intelligence stat
+        vitality - int, vitality stat
+        strength, - int, strength stat
+        dexterity - int, strength stat
+        det - int, determination stat
+        skill_speed - int, skill speed stat
+        spell_speed - int, spell speed stat
+        tenacity - tenacity stat
+        crit_stat - critical hit stat
+        dh_stat - direct hit rate stat
+        weapon_damage - weapon damage stat
+        delay - weapon delay stat
+        """
+        super().__init__(mind, 130, mind, mind, intelligence, vitality, strength, dexterity, det,
+                         tenacity, crit_stat, dh_stat, spell_speed, skill_speed, weapon_damage, delay)
 
         self.auto_trait = 100
 
@@ -208,16 +230,29 @@ class Healer(BaseStats):
         pass
 
 class Tank(BaseStats):
-    """
-    Set tank-specific stats with this class like main stat, traits, etc.
-
-    Most importantly this adjusts the attack modifier.
-    """
     def __init__(self, mind, intelligence, vitality, strength, dexterity,
-                 det, skill_speed, spell_speed, tenacity, crit_stat, dh_stat, wep_dmg_stat, delay) -> None:
+                 det, skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+        """
+        Set tank-specific stats with this class like main stat, traits, etc.
+        Most importantly this adjusts the attack modifier.
 
+        inputs:
+        mind - int, mind stat
+        intelligence - int, intelligence stat
+        vitality - int, vitality stat
+        strength, - int, strength stat
+        dexterity - int, strength stat
+        det - int, determination stat
+        skill_speed - int, skill speed stat
+        spell_speed - int, spell speed stat
+        tenacity - tenacity stat
+        crit_stat - critical hit stat
+        dh_stat - direct hit rate stat
+        weapon_damage - weapon damage stat
+        delay - weapon delay stat
+        """
         super().__init__(strength, 100, strength, mind, intelligence, vitality, strength, dexterity, 
-                         det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, wep_dmg_stat, delay)   
+                         det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay)   
 
         self.add_role('Tank')
         self.atk_mod = 156
@@ -228,12 +263,28 @@ class Tank(BaseStats):
 
 
 class PhysicalRanged(BaseStats):
-
     def __init__(self, mind, intelligence, vitality, strength, dexterity, det, 
-                 skill_speed, spell_speed, tenacity, crit_stat, dh_stat, wep_dmg_stat, delay) -> None:
+                 skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+        """
+        Set physical ranged-specific stats with this class like main stat, traits, etc.
 
+        inputs:
+        mind - int, mind stat
+        intelligence - int, intelligence stat
+        vitality - int, vitality stat
+        strength, - int, strength stat
+        dexterity - int, strength stat
+        det - int, determination stat
+        skill_speed - int, skill speed stat
+        spell_speed - int, spell speed stat
+        tenacity - tenacity stat
+        crit_stat - critical hit stat
+        dh_stat - direct hit rate stat
+        weapon_damage - weapon damage stat
+        delay - weapon delay stat
+        """
         super().__init__(dexterity, 120, dexterity, mind, intelligence, vitality, strength, dexterity, det, 
-                         tenacity, crit_stat, dh_stat, skill_speed, skill_speed, wep_dmg_stat, delay)
+                         tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay)
 
         self.add_role('Physical Ranged')
         
@@ -242,12 +293,28 @@ class PhysicalRanged(BaseStats):
         pass
 
 class MagicalRanged(BaseStats):
-
     def __init__(self, mind, intelligence, vitality, strength, dexterity, det, 
-                 skill_speed, spell_speed, tenacity, crit_stat, dh_stat, wep_dmg_stat, delay) -> None:
+                 skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+        """
+        Set magical ranged-specific stats with this class like main stat, traits, etc.
 
+        inputs:
+        mind - int, mind stat
+        intelligence - int, intelligence stat
+        vitality - int, vitality stat
+        strength, - int, strength stat
+        dexterity - int, strength stat
+        det - int, determination stat
+        skill_speed - int, skill speed stat
+        spell_speed - int, spell speed stat
+        tenacity - tenacity stat
+        crit_stat - critical hit stat
+        dh_stat - direct hit rate stat
+        weapon_damage - weapon damage stat
+        delay - weapon delay stat
+        """
         super().__init__(intelligence, 130, intelligence, mind, intelligence, vitality, strength, dexterity, det, 
-                         tenacity, crit_stat, dh_stat, spell_speed, skill_speed, wep_dmg_stat, delay)
+                         tenacity, crit_stat, dh_stat, spell_speed, skill_speed, weapon_damage, delay)
 
         self.add_role('Caster')
         
@@ -257,12 +324,28 @@ class MagicalRanged(BaseStats):
 
 
 class Melee(BaseStats):
-
     def __init__(self, mind, intelligence, vitality, strength, dexterity,
-                 det, skill_speed, spell_speed, tenacity, crit_stat, dh_stat, wep_dmg_stat, delay) -> None:
+                 det, skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+        """
+        Set melee-specific stats with this class like main stat, traits, etc.
 
+        inputs:
+        mind - int, mind stat
+        intelligence - int, intelligence stat
+        vitality - int, vitality stat
+        strength, - int, strength stat
+        dexterity - int, strength stat
+        det - int, determination stat
+        skill_speed - int, skill speed stat
+        spell_speed - int, spell speed stat
+        tenacity - tenacity stat
+        crit_stat - critical hit stat
+        dh_stat - direct hit rate stat
+        weapon_damage - weapon damage stat
+        delay - weapon delay stat
+        """
         super().__init__(strength, 100, strength, mind, intelligence, vitality, strength, dexterity, 
-                         det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, wep_dmg_stat, delay)
+                         det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay)
 
         self.add_role('Melee')
         
@@ -270,74 +353,4 @@ class Melee(BaseStats):
         self.spell_speed = spell_speed  
 
 if __name__ == "__main__":
-
-    strength = 2651
-    dex = 392
-    vit = 2677
-    intelligence = 410
-    mind = 2825
-
-    crit = 2237
-    det = 1633
-    dh = 964
-
-    ten = 400
-
-    sks = 400
-    sps = 1035
-
-    wd = 120
-    delay = 2.8
-
-    drg = Melee(mind, intelligence, vit, strength, dex, det, sks, sps, ten, crit, dh, wd, delay)
-
-    drg.dot_d2(45, False)
-    drg.auto_attack_d2(90)
-
-
-
-    # sch = Healer(mind, intelligence, vit, strength, dex, det, sks, sps, ten, crit, dh, wd, delay)
-
-    # drg = Melee()
-
-    import json
-
-    rotation_str = """{"action-name":["Broil IV-Pot","Broil IV-Pot_WM","Broil IV-EM_Mug_Pot_WM","Energy Drain-BH_BL_BV_CS_DIV_EM_Mug_Pot_RF1_WM","Broil IV-BH_BL_BV_CS_DIV_EM_Mug_Pot_RF1_WM","Energy Drain-BH_BL_CS_EM_Mug_Pot_WM","Broil IV-WM","Biolysis Tick-Pot_WM","Biolysis Tick-BH_BL_BV_CS_DIV_EM_Mug_Pot_RF1_WM"],"potency":[295,295,295,100,295,100,295,70,70],"n":[1,2,2,5,5,1,2,7,4],"p":[[0.6235649999999999,0.21343499999999999,0.121435,0.041565000000000005],[0.606825,0.23017500000000002,0.118175,0.044825000000000004],[0.606825,0.23017500000000002,0.118175,0.044825000000000004],[0.33442500000000003,0.302575,0.190575,0.172425],[0.33442500000000003,0.302575,0.190575,0.172425],[0.43942499999999995,0.397575,0.08557500000000001,0.077425],[0.606825,0.23017500000000002,0.118175,0.044825000000000004],[0.606825,0.23017500000000002,0.118175,0.044825000000000004],[0.33442500000000003,0.302575,0.190575,0.172425]],"l_c":[1605,1605,1605,1605,1605,1605,1605,1605,1605],"buffs":[[],[],[1.05,1.05],[1.05,1.05,1.02,1.05,1.06],[1.05,1.05,1.02,1.05,1.06],[1.05,1.05,1.05],[],[],[1.05,1.05,1.02,1.05,1.06]],"damage-type":["direct","direct","direct","direct","direct","direct","direct","magic-dot","magic-dot"],"main-stat-add":[223,223,223,223,223,223,0,223,223]}"""
-
-    rotation_df = pd.DataFrame(json.loads(rotation_str))
-
-    strength = 350
-    dex = 392
-    vit = 2677
-    intelligence = 410
-    mind = 2825
-
-    crit = 1702
-    det = 1936
-    dh = 600
-
-    ten = 400
-
-    sks = 400
-    sps = 1035
-
-    wd = 123
-    delay = 3.12
-
-    sch = Healer(mind, intelligence, vit, strength, dex, det, sks, sps, ten, crit, dh, wd, delay)
-    sch.add_job_name('SCH')
-    sch.attach_rotation(rotation_df, 31)
-    
-    import matplotlib.pyplot as plt
-
-    fig, ax = plt.subplots(1, 2, figsize=(9,4), dpi=200)
-    ax[0] = sch.plot_unique_action_distribution(ax[0])
-    ax[1] = sch.plot_rotation_distribution(ax[1], label='Full Rotation')
-
-    ax[0].set_ylabel('Frequency')
-    ax[0].set_xlabel('Damage per Second (DPS)')
-    ax[1].legend()
-    plt.tight_layout()
-    plt.show()
-
-    print('done')
+    pass
