@@ -4,7 +4,10 @@
 
 `ffxiv_stats` is a Python package to compute statistics relating to damage variability in Final Fantasy XIV. Variability from hit types (critical, direct, critical-direct) and random +/- 5% rolls are considered. Either moments (mean, variance, and skewness) or damage distributions can be calculated. Both methods are exact or (asymptotically exact) and do not rely on sampling.
 
+IMPORTANT: This package is still in the early stages of development and still some sharp edges. It is perfectly usable in its current state, but there is is effectively no error checking/handling. There are also no safety rails; if you try to model a rotation that is impossible in-game, you will still get mathematically correct values. Garbage in = garbage out. Also, be aware that class and method names changes are likely.
+
 IMPORTANT: The effects of hit type rate buffs on skills with guaranteed critical/direct hits is currently not implemented.
+
 ALSO IMPORTANT: Everything here is assuming level 90. There is currently no easy way to handle lower levels.
 
 ## Getting started
@@ -49,13 +52,17 @@ Check out `examples/examples.ipynb` for some basic usages.
 
 ### Installation
 
-`ffxiv_stats` can currently be installed from source using setuptools.
+`ffxiv_stats` can be installed from source using [flit](https://flit.pypa.io/en/stable/). While in the root directory, use the command
 
 ```sh
-python setup.py install --user
+flit install
 ```
 
-TODO: publish to PyPI to install with pip.
+Alternatively, the package can also be installed with pip.
+
+```
+pip install ffxiv_stats
+```
 
 ### Requirements
 
