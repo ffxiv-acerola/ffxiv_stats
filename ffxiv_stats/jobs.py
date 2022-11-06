@@ -158,6 +158,7 @@ class BaseStats(Rotation):
 
             elif row['damage-type'] == 'auto':
                 d2.append(self.auto_attack_d2(row['potency']))
+                is_dot.append(0)
 
         rotation_df['d2'] = d2
         rotation_df['is-dot'] = is_dot
@@ -165,7 +166,7 @@ class BaseStats(Rotation):
         super().__init__(rotation_df, t)
         pass
 
-    def auto_attack_d2(self, potency, ap_adjust=0):
+    def auto_attack_d2(self, potency, ap_adjust=0, stat_override=None):
         """
         Get base damage of an auto-attack before any variability.
 
@@ -173,7 +174,16 @@ class BaseStats(Rotation):
         potency - int, potency of an attack
         ap_adjust - int, amount of main stat to add. Used to account for medication. 
         """
-        auto_d1 = nf(nf(nf(potency * self.f_atk(ap_adjust) * self.f_det()) / 100) / 1000)
+
+        # Account for healer auto attacks.
+        # who use strength for AA but main stat is mind
+        # All other jobs have AA scale off of main stat
+        if isinstance(self, Healer):
+            atk = np.floor(self.atk_mod * ((self.strength + ap_adjust) - self.lvl_main) / self.lvl_main) + 100
+        else:
+            atk = self.f_atk(ap_adjust)    
+
+        auto_d1 = nf(nf(nf(potency * atk * self.f_det()) / 100) / 1000)
         auto_d2 = nf(nf(nf(nf(nf(nf(nf(nf(auto_d1 * self.f_ten()) / 1000) * self.f_speed_auto()) / 1000) * self.f_auto()) / 100) * self.trait) / 100)
         return auto_d2
 
