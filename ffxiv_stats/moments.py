@@ -251,13 +251,16 @@ class ActionMoments(Support):
 
 class Rotation():
 
-    def __init__(self, rotation_df, t) -> None:
+    def __init__(self, rotation_df, t, unique_action_delimiter='-') -> None:
         """
         Get damage variability for a rotation.
 
         Inputs:
         rotation_df:
         t - float, time elapsed to compute damage per second (DPS). To get total damage dealt, set t=1.
+        unique_action_delimiter - str, delimiter which follows the unique action name. Defaults to '-'. 
+                                  For example Broil IV-WM_Mug would signify Broil IV as the unique action.
+                                  The delimiter should only appear once in the string name.
         """
         
         self.rotation_df = rotation_df
@@ -275,11 +278,11 @@ class Rotation():
         # Need just the numerator of Pearson's skewness, which is why we multiply by the action variances inside the sum
         self.rotation_skewness = np.sum(self.action_skewness * self.action_variances**(3/2)) / np.sum(self.action_variances)**(3/2) 
 
-        self.compute_dps_distributions()
+        self.compute_dps_distributions(unique_action_delimiter)
 
         pass
 
-    def compute_dps_distributions(self) -> None:
+    def compute_dps_distributions(self, unique_action_delimiter='-') -> None:
         """
         Compute and set the support and PMF of DPS distributions.
 
@@ -287,6 +290,11 @@ class Rotation():
         (i) Individual actions (remember Action A with Buff 1 is distinct from Action A with Buff 2).
         (ii) Unique actions (Action A with Buff 1 and Action A with Buff 2 are group together now).
         (iii) The entire rotation.
+
+        Inputs:
+        unique_action_delimiter - str, delimiter which follows the unique action name. Defaults to '-'. 
+                                  For example Broil IV-WM_Mug would signify Broil IV as the unique action.
+                                  The delimiter should only appear once in the string name.
         """
 
         # DPS is discretized by this much.
@@ -323,7 +331,7 @@ class Rotation():
                 self.action_dps_distributions[a] = skewnorm.pdf(self.action_dps_support[a], alpha, squigma, omega)
 
         # Section (ii)
-        self.unique_actions = {n: [] for n in {x.split('-')[0] for x in self.action_names}}
+        self.unique_actions = {n: [] for n in {x.split(unique_action_delimiter)[0] for x in self.action_names}}
         [self.unique_actions[k].append(idx) for k in self.unique_actions.keys() for idx, s in enumerate(self.action_names) if k in s]
         self.unique_actions_distribution = {}
         
