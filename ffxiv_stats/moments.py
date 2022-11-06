@@ -346,8 +346,9 @@ class Rotation():
             if len(action_idx_list) > 2:
                 for idx in range(1, len(action_idx_list)-1):
                     action_dps_distribution = fftconvolve(action_dps_distribution, 
-                                                          self.action_dps_distributions[action_idx_list[idx+1]])
-
+                                                          self.action_dps_distributions[action_idx_list[idx+1]])           
+            # Normalize unique action distribution
+            action_dps_distribution *= delta**(len(action_idx_list) - 1)
             self.unique_actions_distribution[name] = {'support': support, 'dps_distribution': action_dps_distribution}
 
 
@@ -467,7 +468,7 @@ class Rotation():
             plt.show()
             pass
 
-    def plot_unique_action_distribution(self, ax=None, **kwargs):
+    def plot_unique_action_distributions(self, ax=None, **kwargs):
         """
         Plot DPS distribution for unique actions, grouped by action name.
         For example, this would should the sum of DPS distributions for Action A with Buff 1 and Action A with Buff 2
