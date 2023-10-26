@@ -233,7 +233,7 @@ class Healer(BaseStats):
                          tenacity, crit_stat, dh_stat, spell_speed, skill_speed, weapon_damage, delay)
 
         self.auto_trait = 100
-
+        self.atk_mod = 195
         self.dot_speed_stat = spell_speed
         self.auto_speed_stat = skill_speed
         self.add_role('Healer')
