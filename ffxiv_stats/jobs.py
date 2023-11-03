@@ -137,31 +137,31 @@ class BaseStats(Rotation):
                         'p': list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH]
                         'l_c': int, damage multiplier for a critical hit
                         'buffs': list of buffs present. A 10% buff should be represented as [1.10]
-                        'damage-type': str saying the type of damage, {'direct', 'magic-dot', 'physical-dot', 'auto'} 
-                        'main-stat-add': integer of how much to add to the main stat (if medication is present)
+                        'damage_type': str saying the type of damage, {'direct', 'magic-dot', 'physical-dot', 'auto'} 
+                        'main_stat_add': integer of how much to add to the main stat (if medication is present)
         """
 
         d2 = []
         is_dot = []
         for _, row in rotation_df.iterrows():
-            if row['damage-type'] == 'direct':
-                d2.append(self.direct_d2(row['potency'], ap_adjust=row['main-stat-add']))
+            if row['damage_type'] == 'direct':
+                d2.append(self.direct_d2(row['potency'], ap_adjust=row['main_stat_add']))
                 is_dot.append(0)
 
-            elif row['damage-type'] == 'magic-dot':
-                d2.append(self.dot_d2(row['potency'], magic=True, ap_adjust=row['main-stat-add']))
+            elif row['damage_type'] == 'magic-dot':
+                d2.append(self.dot_d2(row['potency'], magic=True, ap_adjust=row['main_stat_add']))
                 is_dot.append(1)
 
-            elif row['damage-type'] == 'physical-dot':
-                d2.append(self.dot_d2(row['potency'], magic=False, ap_adjust=row['main-stat-add']))
+            elif row['damage_type'] == 'physical-dot':
+                d2.append(self.dot_d2(row['potency'], magic=False, ap_adjust=row['main_stat_add']))
                 is_dot.append(1)
 
-            elif row['damage-type'] == 'auto':
+            elif row['damage_type'] == 'auto':
                 d2.append(self.auto_attack_d2(row['potency']))
                 is_dot.append(0)
 
         rotation_df['d2'] = d2
-        rotation_df['is-dot'] = is_dot
+        rotation_df['is_dot'] = is_dot
 
         super().__init__(rotation_df, t)
         pass

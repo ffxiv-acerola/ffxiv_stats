@@ -119,14 +119,14 @@ class ActionMoments(Support):
         self.n = action_df['n']
         self.p = action_df['p']
         self.t = t
-        if 'action-name' in action_df:
-            self.action_name = action_df['action-name']
+        if 'action_name' in action_df:
+            self.action_name = action_df['action_name']
         # All possible hit types
         self.x = self.hit_type_combos(self.n)
         # Corresponding multinomial weight
         self.w = multinomial(self.n, self.p).pmf(self.x)
 
-        Support.__init__(self, action_df['d2'], action_df['l_c'], bool(action_df['is-dot']), action_df['buffs'])
+        Support.__init__(self, action_df['d2'], action_df['l_c'], bool(action_df['is_dot']), action_df['buffs'])
         
         # Lots of notation for computing moments when there are gaps
         self._S_N = self.normal_supp.size
@@ -266,7 +266,7 @@ class Rotation():
         self.rotation_df = rotation_df
         self.t = t
         self.action_moments = [ActionMoments(row, t) for _, row in rotation_df.iterrows()]
-        self.action_names = rotation_df['action-name'].tolist()
+        self.action_names = rotation_df['action_name'].tolist()
         self.action_means = np.array([x.mean for x in self.action_moments]) 
         self.action_variances = np.array([x.variance for x in self.action_moments])
         self.action_std = np.sqrt(self.action_variances)
