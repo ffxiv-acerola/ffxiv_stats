@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 from scipy.stats import multinomial, skewnorm
 from scipy.signal import fftconvolve
@@ -251,20 +252,18 @@ class ActionMoments(Support):
 
 class Rotation():
 
-    def __init__(self, rotation_df, t, unique_action_delimiter='-') -> None:
+    def __init__(self, rotation_df, t, convolve_all=False) -> None:
         """
         Get damage variability for a rotation.
 
         Inputs:
         rotation_df:
-        t - float, time elapsed to compute damage per second (DPS). To get total damage dealt, set t=1.
-        unique_action_delimiter - str, delimiter which follows the unique action name. Defaults to '-'. 
-                                  For example Broil IV-WM_Mug would signify Broil IV as the unique action.
-                                  The delimiter should only appear once in the string name.
         """
         
         self.rotation_df = rotation_df
         self.t = t
+        self.convolve_all = convolve_all
+
         self.action_moments = [ActionMoments(row, t) for _, row in rotation_df.iterrows()]
         self.action_names = rotation_df['action_name'].tolist()
         self.action_means = np.array([x.mean for x in self.action_moments]) 
@@ -278,11 +277,11 @@ class Rotation():
         # Need just the numerator of Pearson's skewness, which is why we multiply by the action variances inside the sum
         self.rotation_skewness = np.sum(self.action_skewness * self.action_variances**(3/2)) / np.sum(self.action_variances)**(3/2) 
 
-        self.compute_dps_distributions(unique_action_delimiter)
+        self.compute_dps_distributions()
 
         pass
 
-    def compute_dps_distributions(self, unique_action_delimiter='-') -> None:
+    def compute_dps_distributions(self) -> None:
         """
         Compute and set the support and PMF of DPS distributions.
 
@@ -290,11 +289,6 @@ class Rotation():
         (i) Individual actions (remember Action A with Buff 1 is distinct from Action A with Buff 2).
         (ii) Unique actions (Action A with Buff 1 and Action A with Buff 2 are group together now).
         (iii) The entire rotation.
-
-        Inputs:
-        unique_action_delimiter - str, delimiter which follows the unique action name. Defaults to '-'. 
-                                  For example Broil IV-WM_Mug would signify Broil IV as the unique action.
-                                  The delimiter should only appear once in the string name.
         """
 
         # DPS is discretized by this much.
@@ -302,7 +296,7 @@ class Rotation():
         # Smaller number = slower but more accurate.
         delta = 0.5
 
-        # section (i)
+        # section (i), individual actions
         self.action_dps_support = [None] * self.action_means.size
         self.action_dps_distributions = [None] * self.action_means.size
         self.rotation_dps_distribution = None
@@ -318,7 +312,8 @@ class Rotation():
             n = self.action_moments[a].n
             low_high_rolls[a,:] = ([int(n * self.action_moments[a].normal_supp[0] / self.t), 
                                     int(n * self.action_moments[a].crit_dir_supp[-1] / self.t)])
-            if self.action_moments[a].n < 20:
+            
+            if (self.action_moments[a].n < 35) and (not self.convolve_all):
                 x, y = self.convolve_pmf(a)
                 self.action_dps_support[a] = np.arange(low_high_rolls[a,0], low_high_rolls[a,1] + delta, step=delta)
                 self.action_dps_distributions[a] = np.interp(self.action_dps_support[a], x, y)
@@ -330,11 +325,17 @@ class Rotation():
                                                       np.floor(low_high_rolls[a,1]) + delta, step=delta)
                 self.action_dps_distributions[a] = skewnorm.pdf(self.action_dps_support[a], alpha, squigma, omega)
 
-        # Section (ii)
-        self.unique_actions = {n: [] for n in {x.split(unique_action_delimiter)[0] for x in self.action_names}}
-        [self.unique_actions[k].append(idx) for k in self.unique_actions.keys() for idx, s in enumerate(self.action_names) if k in s]
-        self.unique_actions_distribution = {}
+        # Section (ii) base actions
+        # Neat little function which says which base_action each index belongs to
+        idx, name = pd.factorize(self.rotation_df["base_action"])
+        self.unique_actions = {}
+        self.unique_actions = {n: [] for n in name}
+
+        for i, x in enumerate(idx):
+            self.unique_actions[name[x]].append(i)
         
+        self.unique_actions_distribution = {}
+
         for _, (name, action_idx_list) in enumerate(self.unique_actions.items()):
             action_low_high = np.zeros((len(self.unique_actions[name]), 2))
 
@@ -356,11 +357,12 @@ class Rotation():
                     action_dps_distribution = fftconvolve(action_dps_distribution, 
                                                           self.action_dps_distributions[action_idx_list[idx+1]])           
             # Normalize unique action distribution
-            action_dps_distribution *= delta**(len(action_idx_list) - 1)
+            # There might be an exact formula, but dividing by area under the curve is way easier.
+            action_dps_distribution /= np.trapz(action_dps_distribution, support)
             self.unique_actions_distribution[name] = {'support': support, 'dps_distribution': action_dps_distribution}
 
 
-        # Section (iii)
+        # Section (iii) whole rotation
         self.rotation_dps_support = np.arange(low_high_rolls[:,0].sum(), low_high_rolls[:,1].sum() + delta, step=delta)
         
         if len(self.action_moments) > 1:
@@ -373,7 +375,7 @@ class Rotation():
                 self.rotation_dps_distribution = fftconvolve(self.action_dps_distributions[a], self.rotation_dps_distribution)            
         
         # Need to renormalize the DPS distribution
-        self.rotation_dps_distribution *= delta**(len(self.action_dps_distributions) - 1)
+        self.rotation_dps_distribution /= np.trapz(self.rotation_dps_distribution, self.rotation_dps_support)
         pass
 
     @classmethod
