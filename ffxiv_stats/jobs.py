@@ -131,15 +131,22 @@ class BaseStats(Rotation):
         Attach a rotation data frame and compute the corresponding DPS distribution.
 
         Inputs 
-        rotation_df - pandas dataframe, dataframe containing rotation attributes. Should have the following schema:
-                        'action-name': list of actions
-                        'potency': potencies of the action
-                        'p': list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH]
-                        'l_c': int, damage multiplier for a critical hit
-                        'buffs': list of buffs present. A 10% buff should be represented as [1.10]
-                        'damage_type': str saying the type of damage, {'direct', 'magic-dot', 'physical-dot', 'auto'} 
-                        'main_stat_add': integer of how much to add to the main stat (if medication is present)
+        rotation_df - pandas dataframe, dataframe containing rotation attributes. Should have the following columns:
+                     action_name: unique name of an action, accounting buffs
+                     base_action: name of an action ignoring buffs. For example, Glare III with chain stratagem
+                                  and Glare III with mug will have different `action_names`, but the same base_action.
+                                  Used for grouping actions together.
+                      potency: potencies of the action
+                      p: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH]
+                      l_c: int, damage multiplier for a critical hit
+                      buffs: list of buffs present. A 10% buff should be represented as [1.10]
+                      damage_type: str saying the type of damage, {'direct', 'magic-dot', 'physical-dot', 'auto'} 
+                      main_stat_add: integer of how much to add to the main stat (used to account for medication, if present)
         """
+        column_check = set(["potency", "damage_type"])
+        missing_columns = column_check - set(rotation_df.columns)
+        if len(missing_columns) != 0:
+            raise ValueError(f"The following column(s) are missing from `rotation_df`: {*missing_columns,}. Please refer to the docstring and add these field(s) or double check the spelling.")
 
         d2 = []
         is_dot = []
@@ -159,6 +166,9 @@ class BaseStats(Rotation):
             elif row['damage_type'] == 'auto':
                 d2.append(self.auto_attack_d2(row['potency']))
                 is_dot.append(0)
+
+            else:
+                raise ValueError(f"Invalid damage type value of '{row['damage_type']}'. Allow values are ('direct', 'magic-dot', 'physical-dot', 'auto')")
 
         rotation_df['d2'] = d2
         rotation_df['is_dot'] = is_dot

@@ -114,8 +114,19 @@ class ActionMoments(Support):
         Compute moments for a action landing n_hits
 
         inputs: 
-        action_df - pandas dataframe with the schema {d2} 
+        action_df - pandas dataframe with the columns: 
+                    n: number of hits.
+                    p: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH].
+                    d2: base damage value of action before any variability.
+                    l_c: int, damage multiplier for a critical hit. Value should be in thousands (1250 -> 125% crit buff).
+                    buffs: list of buffs present. A 10% buff should be represented as [1.10], no buff as [1].
+                    is_dot: boolean or 0/1, whether the action is a damage over time effect.
         """
+
+        column_check = set(["n", "p", "d2", "l_c", "buffs", "is_dot"])
+        missing_columns = column_check - set(action_df.columns)
+        if len(missing_columns) != 0:
+            raise ValueError(f"The following column(s) are missing from `rotation_df`: {*missing_columns,}. Please refer to the docstring and add these field(s) or double check the spelling.")
 
         self.n = action_df['n']
         self.p = action_df['p']
@@ -257,9 +268,25 @@ class Rotation():
         Get damage variability for a rotation.
 
         Inputs:
-        rotation_df:
+        rotation_df: rotation dataframe with the following columns:
+                     action_name: unique name of an action, accounting buffs
+                     base_action: name of an action ignoring buffs. For example, Glare III with chain stratagem
+                                  and Glare III with mug will have different `action_names`, but the same base_action.
+                                  Used for grouping actions together.
+                     n: number of hits.
+                     p: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH].
+                     d2: base damage value of action before any variability.
+                     l_c: int, damage multiplier for a critical hit. Value should be in thousands (1250 -> 125% crit buff).
+                     buffs: list of buffs present. A 10% buff should be represented as [1.10], no buff as [1].
+                     is_dot: boolean or 0/1, whether the action is a damage over time effect.
+        t: float, time elapsed in seconds. Set t=1 to get damage dealt instead of DPS.
+        convolve_all: bool, whether to compute all DPS distributions by convolutions (normally actions with large n can be computed with a skew normal distribution).
         """
-        
+        column_check = set(["base_action", "action_name"])
+        missing_columns = column_check - set(rotation_df.columns)
+        if len(missing_columns) != 0:
+            raise ValueError(f"The following column(s) are missing from `rotation_df`: {*missing_columns,}. Please refer to the docstring and add these field(s) or double check the spelling.")
+                
         self.rotation_df = rotation_df
         self.t = t
         self.convolve_all = convolve_all
