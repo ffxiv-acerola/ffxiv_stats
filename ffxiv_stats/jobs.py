@@ -126,44 +126,56 @@ class BaseStats(Rotation):
         # TODO: add GCD (probably not essential?)
         pass
 
-    def attach_rotation(self, rotation_df, t):
+    def attach_rotation(self, rotation_df, t, convolve_all=False):
         """
         Attach a rotation data frame and compute the corresponding DPS distribution.
 
         Inputs 
-        rotation_df - pandas dataframe, dataframe containing rotation attributes. Should have the following schema:
-                        'action-name': list of actions
-                        'potency': potencies of the action
-                        'p': list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH]
-                        'l_c': int, damage multiplier for a critical hit
-                        'buffs': list of buffs present. A 10% buff should be represented as [1.10]
-                        'damage-type': str saying the type of damage, {'direct', 'magic-dot', 'physical-dot', 'auto'} 
-                        'main-stat-add': integer of how much to add to the main stat (if medication is present)
+        rotation_df - pandas dataframe, dataframe containing rotation attributes. Should have the following columns:
+                      action_name: str, unique name of an action. Unique action depends on `buffs`, `p`, and `l_c` present.
+                      base_action: str, name of an action ignoring buffs. For example, Glare III with chain stratagem
+                                        and Glare III with mug will have different `action_names`, but the same base_action.
+                                        Used for grouping actions together.
+                      potency: int, potency of the action
+                      n: int, number of hits for the action.
+                      p: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH]
+                      l_c: int, damage multiplier for a critical hit. 
+                                Value should be in the thousands (1250 -> 125% crit buff).
+                      buffs: list of buffs present. A 10% buff should is represented as [1.10]. No buffs can be represented at [1] or None.
+                      damage_type: str saying the type of damage, {'direct', 'magic-dot', 'physical-dot', 'auto'}
+                      main_stat_add: int, how much to add to the main stat (used to account for medication, if present) when computing d2
         """
+        column_check = set(["potency", "damage_type"])
+        missing_columns = column_check - set(rotation_df.columns)
+        if len(missing_columns) != 0:
+            raise ValueError(f"The following column(s) are missing from `rotation_df`: {*missing_columns,}. Please refer to the docstring and add these field(s) or double check the spelling.")
 
         d2 = []
         is_dot = []
         for _, row in rotation_df.iterrows():
-            if row['damage-type'] == 'direct':
-                d2.append(self.direct_d2(row['potency'], ap_adjust=row['main-stat-add']))
+            if row['damage_type'] == 'direct':
+                d2.append(self.direct_d2(row['potency'], ap_adjust=row['main_stat_add']))
                 is_dot.append(0)
 
-            elif row['damage-type'] == 'magic-dot':
-                d2.append(self.dot_d2(row['potency'], magic=True, ap_adjust=row['main-stat-add']))
+            elif row['damage_type'] == 'magic-dot':
+                d2.append(self.dot_d2(row['potency'], magic=True, ap_adjust=row['main_stat_add']))
                 is_dot.append(1)
 
-            elif row['damage-type'] == 'physical-dot':
-                d2.append(self.dot_d2(row['potency'], magic=False, ap_adjust=row['main-stat-add']))
+            elif row['damage_type'] == 'physical-dot':
+                d2.append(self.dot_d2(row['potency'], magic=False, ap_adjust=row['main_stat_add']))
                 is_dot.append(1)
 
-            elif row['damage-type'] == 'auto':
+            elif row['damage_type'] == 'auto':
                 d2.append(self.auto_attack_d2(row['potency']))
                 is_dot.append(0)
 
-        rotation_df['d2'] = d2
-        rotation_df['is-dot'] = is_dot
+            else:
+                raise ValueError(f"Invalid damage type value of '{row['damage_type']}'. Allow values are ('direct', 'magic-dot', 'physical-dot', 'auto')")
 
-        super().__init__(rotation_df, t)
+        rotation_df['d2'] = d2
+        rotation_df['is_dot'] = is_dot
+
+        super().__init__(rotation_df, t, convolve_all)
         pass
 
     def auto_attack_d2(self, potency, ap_adjust=0, stat_override=None):
@@ -239,128 +251,128 @@ class Healer(BaseStats):
         self.add_role('Healer')
         pass
 
-class Tank(BaseStats):
-    def __init__(self, mind, intelligence, vitality, strength, dexterity,
-                 det, skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
-        """
-        Set tank-specific stats with this class like main stat, traits, etc.
-        Most importantly this adjusts the attack modifier.
+# class Tank(BaseStats):
+#     def __init__(self, mind, intelligence, vitality, strength, dexterity,
+#                  det, skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+#         """
+#         Set tank-specific stats with this class like main stat, traits, etc.
+#         Most importantly this adjusts the attack modifier.
 
-        inputs:
-        mind - int, mind stat
-        intelligence - int, intelligence stat
-        vitality - int, vitality stat
-        strength, - int, strength stat
-        dexterity - int, strength stat
-        det - int, determination stat
-        skill_speed - int, skill speed stat
-        spell_speed - int, spell speed stat
-        tenacity - tenacity stat
-        crit_stat - critical hit stat
-        dh_stat - direct hit rate stat
-        weapon_damage - weapon damage stat
-        delay - weapon delay stat
-        """
-        super().__init__(strength, 100, strength, mind, intelligence, vitality, strength, dexterity, 
-                         det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay)   
+#         inputs:
+#         mind - int, mind stat
+#         intelligence - int, intelligence stat
+#         vitality - int, vitality stat
+#         strength, - int, strength stat
+#         dexterity - int, strength stat
+#         det - int, determination stat
+#         skill_speed - int, skill speed stat
+#         spell_speed - int, spell speed stat
+#         tenacity - tenacity stat
+#         crit_stat - critical hit stat
+#         dh_stat - direct hit rate stat
+#         weapon_damage - weapon damage stat
+#         delay - weapon delay stat
+#         """
+#         super().__init__(strength, 100, strength, mind, intelligence, vitality, strength, dexterity, 
+#                          det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay)   
 
-        self.add_role('Tank')
-        self.atk_mod = 156
+#         self.add_role('Tank')
+#         self.atk_mod = 156
         
-        self.skill_speed = skill_speed
-        self.spell_speed = spell_speed
-        pass
+#         self.skill_speed = skill_speed
+#         self.spell_speed = spell_speed
+#         pass
 
 
-class PhysicalRanged(BaseStats):
-    def __init__(self, mind, intelligence, vitality, strength, dexterity, det, 
-                 skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
-        """
-        Set physical ranged-specific stats with this class like main stat, traits, etc.
+# class PhysicalRanged(BaseStats):
+#     def __init__(self, mind, intelligence, vitality, strength, dexterity, det, 
+#                  skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+#         """
+#         Set physical ranged-specific stats with this class like main stat, traits, etc.
 
-        inputs:
-        mind - int, mind stat
-        intelligence - int, intelligence stat
-        vitality - int, vitality stat
-        strength, - int, strength stat
-        dexterity - int, strength stat
-        det - int, determination stat
-        skill_speed - int, skill speed stat
-        spell_speed - int, spell speed stat
-        tenacity - tenacity stat
-        crit_stat - critical hit stat
-        dh_stat - direct hit rate stat
-        weapon_damage - weapon damage stat
-        delay - weapon delay stat
-        """
-        super().__init__(dexterity, 120, dexterity, mind, intelligence, vitality, strength, dexterity, det, 
-                         tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay)
+#         inputs:
+#         mind - int, mind stat
+#         intelligence - int, intelligence stat
+#         vitality - int, vitality stat
+#         strength, - int, strength stat
+#         dexterity - int, strength stat
+#         det - int, determination stat
+#         skill_speed - int, skill speed stat
+#         spell_speed - int, spell speed stat
+#         tenacity - tenacity stat
+#         crit_stat - critical hit stat
+#         dh_stat - direct hit rate stat
+#         weapon_damage - weapon damage stat
+#         delay - weapon delay stat
+#         """
+#         super().__init__(dexterity, 120, dexterity, mind, intelligence, vitality, strength, dexterity, det, 
+#                          tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay)
 
-        self.add_role('Physical Ranged')
+#         self.add_role('Physical Ranged')
         
-        self.skill_speed = skill_speed
-        self.spell_speed = spell_speed
-        pass
+#         self.skill_speed = skill_speed
+#         self.spell_speed = spell_speed
+#         pass
 
-class MagicalRanged(BaseStats):
-    def __init__(self, mind, intelligence, vitality, strength, dexterity, det, 
-                 skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
-        """
-        Set magical ranged-specific stats with this class like main stat, traits, etc.
+# class MagicalRanged(BaseStats):
+#     def __init__(self, mind, intelligence, vitality, strength, dexterity, det, 
+#                  skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+#         """
+#         Set magical ranged-specific stats with this class like main stat, traits, etc.
 
-        inputs:
-        mind - int, mind stat
-        intelligence - int, intelligence stat
-        vitality - int, vitality stat
-        strength, - int, strength stat
-        dexterity - int, strength stat
-        det - int, determination stat
-        skill_speed - int, skill speed stat
-        spell_speed - int, spell speed stat
-        tenacity - tenacity stat
-        crit_stat - critical hit stat
-        dh_stat - direct hit rate stat
-        weapon_damage - weapon damage stat
-        delay - weapon delay stat
-        """
-        super().__init__(intelligence, 130, intelligence, mind, intelligence, vitality, strength, dexterity, det, 
-                         tenacity, crit_stat, dh_stat, spell_speed, skill_speed, weapon_damage, delay)
+#         inputs:
+#         mind - int, mind stat
+#         intelligence - int, intelligence stat
+#         vitality - int, vitality stat
+#         strength, - int, strength stat
+#         dexterity - int, strength stat
+#         det - int, determination stat
+#         skill_speed - int, skill speed stat
+#         spell_speed - int, spell speed stat
+#         tenacity - tenacity stat
+#         crit_stat - critical hit stat
+#         dh_stat - direct hit rate stat
+#         weapon_damage - weapon damage stat
+#         delay - weapon delay stat
+#         """
+#         super().__init__(intelligence, 130, intelligence, mind, intelligence, vitality, strength, dexterity, det, 
+#                          tenacity, crit_stat, dh_stat, spell_speed, skill_speed, weapon_damage, delay)
 
-        self.add_role('Caster')
+#         self.add_role('Caster')
         
-        self.skill_speed = skill_speed
-        self.spell_speed = spell_speed
+#         self.skill_speed = skill_speed
+#         self.spell_speed = spell_speed
 
 
 
-class Melee(BaseStats):
-    def __init__(self, mind, intelligence, vitality, strength, dexterity,
-                 det, skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
-        """
-        Set melee-specific stats with this class like main stat, traits, etc.
+# class Melee(BaseStats):
+#     def __init__(self, mind, intelligence, vitality, strength, dexterity,
+#                  det, skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+#         """
+#         Set melee-specific stats with this class like main stat, traits, etc.
 
-        inputs:
-        mind - int, mind stat
-        intelligence - int, intelligence stat
-        vitality - int, vitality stat
-        strength, - int, strength stat
-        dexterity - int, strength stat
-        det - int, determination stat
-        skill_speed - int, skill speed stat
-        spell_speed - int, spell speed stat
-        tenacity - tenacity stat
-        crit_stat - critical hit stat
-        dh_stat - direct hit rate stat
-        weapon_damage - weapon damage stat
-        delay - weapon delay stat
-        """
-        super().__init__(strength, 100, strength, mind, intelligence, vitality, strength, dexterity, 
-                         det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay)
+#         inputs:
+#         mind - int, mind stat
+#         intelligence - int, intelligence stat
+#         vitality - int, vitality stat
+#         strength, - int, strength stat
+#         dexterity - int, strength stat
+#         det - int, determination stat
+#         skill_speed - int, skill speed stat
+#         spell_speed - int, spell speed stat
+#         tenacity - tenacity stat
+#         crit_stat - critical hit stat
+#         dh_stat - direct hit rate stat
+#         weapon_damage - weapon damage stat
+#         delay - weapon delay stat
+#         """
+#         super().__init__(strength, 100, strength, mind, intelligence, vitality, strength, dexterity, 
+#                          det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay)
 
-        self.add_role('Melee')
+#         self.add_role('Melee')
         
-        self.skill_speed = skill_speed
-        self.spell_speed = spell_speed  
+#         self.skill_speed = skill_speed
+#         self.spell_speed = spell_speed  
 
 if __name__ == "__main__":
     pass
