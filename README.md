@@ -31,7 +31,7 @@ The rotation is supplied as a Pandas DataFrame with columns and types:
 
 ### Using a role class
 
-Using a role class is recommended to go from potencies to d2 values given various stats. Attributes like `main_stat`, `trait`, etc are automatically set to the corresponding values of each role. Rotations are attached using the `attach_rotation`, which inherits the `Rotation` class. However, the `rotation_df` argument is similar to the above dataframe, but does have slightly different columns
+Using a role class is recommended to go from potencies to d2 values given various stats. Attributes like `main_stat`, `trait`, etc are automatically set to the corresponding values of each role. Rotations are attached using the `attach_rotation()` method, which inherits the `Rotation` class. However, the `rotation_df` argument is similar to the above dataframe, but does have slightly different columns
 
 * `action_name`: str, unique name of an action. Unique action depends on `buffs`, `p`, and `l_c` present.
 * `base_action`: str, name of an action ignoring buffs. For example, Glare III with chain stratagem and Glare III with mug will have different `action_names`, but the same base_action. Used for grouping actions together.
