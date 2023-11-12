@@ -14,31 +14,34 @@ ALSO IMPORTANT: Everything here is assuming level 90. There is currently no easy
 
 ### Basic usage
 
-Variability can be computed using either the `Rotation` class or one of the role classes (`Healer`, `Tank`, `Melee`, etc.). The `Rotation` class computes variability when `d2` values are known. The role classes inherits the `Rotation` class and converts potencies to `d2` values based on supplied stats. Each role class varies in how it assigns main stats, traits, attack modifier, etc.
+Variability can be computed using either the `Rotation` class or one of the role classes (currently only `Healer` is supported, other roles have not been verified yet). The `Rotation` class computes variability when `d2` values are known. The role classes inherits the `Rotation` class and converts potencies to `d2` values based on supplied stats. Each role class varies in how it assigns main stats, traits, attack modifier, etc.
 
 ### Using the `Rotation` class
 
-The rotation is supplied as a Pandas DataFrame with columns:
+The rotation is supplied as a Pandas DataFrame with columns and types:
 
-* `d2`: Damage of an action before hit type and damage roll variability. 
-* `n`: Number of hits for each unique action. Note unique actions depend on `buffs`, `p`, and `l_c`. Action A with a 10% damage buff 10% increase to critical hit rate is different is different than action A with only a 10% buff.
-* `p`: list of hit type probabilities in order `[p_NH, p_CH, p_DH, p_CDH]`.
-* `l_c`: critical hit damage modifier, should be O(1000).
-* `buffs`: List of any buffs present. A 10% damage buff would be `[1.10]`. If no buffs are present, then an empty list `[]`, list with none (`[None]`), or `[1]` can be supplied.
-* `is-dot`: boolean for whether the action is a DoT effect. DoT effects have a different support than direct damage.
-* `action-name`: name of the action. See Action Naming for more info on how to name actions.
+* `action_name`: str, unique name of an action. Unique action depends on `buffs`, `p`, and `l_c` present.
+* `base_action`: str, name of an action ignoring buffs. For example, Glare III with chain stratagem and Glare III with mug will have different `action_names`, but the same base_action. Used for grouping actions together.
+* `n`: int, number of hits.
+* `p`: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH].
+* `d2`: int, base damage value of action before any variability.
+* `l_c`: int, damage multiplier for a critical hit. Value should be in the thousands (1250 -> 125% crit buff).
+* `buffs`: list of buffs present. A 10% buff should is represented as [1.10]. No buffs can be represented at [1] or None.
+* `is_dot`: boolean or 0/1, whether the action is a damage over time effect.
 
 ### Using a role class
 
 Using a role class is recommended to go from potencies to d2 values given various stats. Attributes like `main_stat`, `trait`, etc are automatically set to the corresponding values of each role. Rotations are attached using the `attach_rotation`, which inherits the `Rotation` class. However, the `rotation_df` argument is similar to the above dataframe, but does have slightly different columns
 
-* `action-name`: list of actions.
-* `potency`: potency of the action
-* `p`: list of hit type probabilities in order `[p_NH, p_CH, p_DH, p_CDH]`.
-* `l_c`: critical hit damage modifier, should be O(1000).
-* `buffs`: List of any buffs present. A 10% damage buff would be `[1.10]`. If no buffs are present, then an empty list `[]`, list with none (`[None]`), or `[1]` can be supplied.
-* `damage-type`: str saying the type of damage, `{'direct', 'magic-dot', 'physical-dot', 'auto'}`.
-* `main-stat-add`: integer of how much to add to the main stat (used to account for medication).
+* `action_name`: str, unique name of an action. Unique action depends on `buffs`, `p`, and `l_c` present.
+* `base_action`: str, name of an action ignoring buffs. For example, Glare III with chain stratagem and Glare III with mug will have different `action_names`, but the same base_action. Used for grouping actions together.
+* `potency`: int, potency of the action
+* `n`: int, number of hits for the action. 
+* `p`: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH]
+* `l_c`: int, damage multiplier for a critical hit. Value should be in the thousands (1250 -> 125% crit buff).
+* `buffs`: list of buffs present. A 10% buff should is represented as [1.10]. No buffs can be represented at [1] or None.
+* `damage_type`: str saying the type of damage, {'direct', 'magic-dot', 'physical-dot', 'auto'} 
+* `main_stat_add`: int, how much to add to the main stat (used to account for medication, if present) when computing d2
 
 Instead of a `d2` column, `potency`, `damage_type`, and `main-stat-add` are used together with player stats to compute and add a `d2` column (along with the `is-dot` column). 
 
@@ -48,7 +51,7 @@ One currently fragile part is how actions are named. In general, action naming c
 
 ### Examples
 
-Check out `examples/examples.ipynb` for some basic usages.
+Check out `examples/` for some basic usages.
 
 ### Installation
 
