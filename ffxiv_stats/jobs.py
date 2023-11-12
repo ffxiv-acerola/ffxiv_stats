@@ -132,16 +132,18 @@ class BaseStats(Rotation):
 
         Inputs 
         rotation_df - pandas dataframe, dataframe containing rotation attributes. Should have the following columns:
-                     action_name: unique name of an action, accounting buffs
-                     base_action: name of an action ignoring buffs. For example, Glare III with chain stratagem
-                                  and Glare III with mug will have different `action_names`, but the same base_action.
-                                  Used for grouping actions together.
-                      potency: potencies of the action
+                      action_name: str, unique name of an action. Unique action depends on `buffs`, `p`, and `l_c` present.
+                      base_action: str, name of an action ignoring buffs. For example, Glare III with chain stratagem
+                                        and Glare III with mug will have different `action_names`, but the same base_action.
+                                        Used for grouping actions together.
+                      potency: int, potency of the action
+                      n: int, number of hits for the action.
                       p: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH]
-                      l_c: int, damage multiplier for a critical hit
-                      buffs: list of buffs present. A 10% buff should be represented as [1.10]
-                      damage_type: str saying the type of damage, {'direct', 'magic-dot', 'physical-dot', 'auto'} 
-                      main_stat_add: integer of how much to add to the main stat (used to account for medication, if present)
+                      l_c: int, damage multiplier for a critical hit. 
+                                Value should be in the thousands (1250 -> 125% crit buff).
+                      buffs: list of buffs present. A 10% buff should is represented as [1.10]. No buffs can be represented at [1] or None.
+                      damage_type: str saying the type of damage, {'direct', 'magic-dot', 'physical-dot', 'auto'}
+                      main_stat_add: int, how much to add to the main stat (used to account for medication, if present) when computing d2
         """
         column_check = set(["potency", "damage_type"])
         missing_columns = column_check - set(rotation_df.columns)
