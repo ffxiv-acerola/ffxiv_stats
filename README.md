@@ -23,7 +23,7 @@ The rotation is supplied as a Pandas DataFrame with columns and types:
 * `action_name`: str, unique name of an action. Unique action depends on `buffs`, `p`, and `l_c` present.
 * `base_action`: str, name of an action ignoring buffs. For example, Glare III with chain stratagem and Glare III with mug will have different `action_names`, but the same base_action. Used for grouping actions together.
 * `n`: int, number of hits.
-* `p`: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH].
+* `p`: list of probability lists, in order `[p_NH, p_CH, p_DH, p_CDH]`.
 * `d2`: int, base damage value of action before any variability.
 * `l_c`: int, damage multiplier for a critical hit. Value should be in the thousands (1250 -> 125% crit buff).
 * `buffs`: list of buffs present. A 10% buff should is represented as [1.10]. No buffs can be represented at [1] or None.
@@ -44,10 +44,6 @@ Using a role class is recommended to go from potencies to d2 values given variou
 * `main_stat_add`: int, how much to add to the main stat (used to account for medication, if present) when computing d2
 
 Instead of a `d2` column, `potency`, `damage_type`, and `main-stat-add` are used together with player stats to compute and add a `d2` column (along with the `is-dot` column). 
-
-### Naming actions
-
-One currently fragile part is how actions are named. In general, action naming convention should follow the form `'{action_name}-{other thing1}_{other_thing2}...'`. This is because when actions are grouped to unique actions and DPS distributions are computed, it is currently done so by taking the unique action name as everything before '-' and ignoring everything after. This will be handled better later.
 
 ### Examples
 
