@@ -346,7 +346,7 @@ class Rotation():
             low_high_rolls[a,:] = ([int(n * self.action_moments[a].normal_supp[0] / self.t), 
                                     int(n * self.action_moments[a].crit_dir_supp[-1] / self.t)])
             
-            if (self.action_moments[a].n < 35) and (not self.convolve_all):
+            if (self.action_moments[a].n > 35) or (self.convolve_all):
                 x, y = self.convolve_pmf(a)
                 self.action_dps_support[a] = np.arange(low_high_rolls[a,0], low_high_rolls[a,1] + delta, step=delta)
                 self.action_dps_distributions[a] = np.interp(self.action_dps_support[a], x, y)
