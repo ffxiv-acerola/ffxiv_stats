@@ -37,7 +37,7 @@ Using a role class is recommended to go from potencies to d2 values given variou
 * `base_action`: str, name of an action ignoring buffs. For example, Glare III with chain stratagem and Glare III with mug will have different `action_names`, but the same base_action. Used for grouping actions together.
 * `potency`: int, potency of the action
 * `n`: int, number of hits for the action. 
-* `p`: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH]
+* `p`: list of probability lists, in order `[p_NH, p_CH, p_DH, p_CDH]`
 * `l_c`: int, damage multiplier for a critical hit. Value should be in the thousands (1250 -> 125% crit buff).
 * `buffs`: list of buffs present. A 10% buff should is represented as [1.10]. No buffs can be represented at [1] or None.
 * `damage_type`: str saying the type of damage, {'direct', 'magic-dot', 'physical-dot', 'auto'} 
