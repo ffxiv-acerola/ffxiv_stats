@@ -1,5 +1,6 @@
 # Other
 math/*
+.vscode/*
 
 # Build
 ffxiv_stats.egg-info/

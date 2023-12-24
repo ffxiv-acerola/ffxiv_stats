@@ -3,20 +3,21 @@ from numpy import floor as nf
 import pandas as pd
 
 from .moments import Rotation
+from modifiers import level_mod
 
 class BaseStats(Rotation):
 
     def __init__(self, attack_power, trait, main_stat, mind, intelligence, vitality, strength, dexterity,
-                 det, tenacity, crit_stat, dh_stat, dot_speed_stat, auto_speed_stat, weapon_damage, delay) -> None:
+                 det, tenacity, crit_stat, dh_stat, dot_speed_stat, auto_speed_stat, weapon_damage, delay, level=90) -> None:
         """
         Base class for converting potency to base damage dealt. Not meant to be used alone.
         Instead use a `ROLE` class, which inherits this class.
         """
         # Level dependent parameters
         # currently for lvl 90
-        self.lvl_div = 1900
-        self.lvl_sub = 400
-        self.lvl_main = 390
+        self.lvl_main = level_mod[level]["lvl_main"]
+        self.lvl_sub = level_mod[level]["lvl_sub"]
+        self.lvl_div = level_mod[level]["lvl_div"]
         self.job_attribute = 115
         # Set this to 156 if tank
         self.atk_mod = 190
@@ -126,7 +127,7 @@ class BaseStats(Rotation):
         # TODO: add GCD (probably not essential?)
         pass
 
-    def attach_rotation(self, rotation_df, t, convolve_all=False):
+    def attach_rotation(self, rotation_df, t, convolve_all=False, delta=250):
         """
         Attach a rotation data frame and compute the corresponding DPS distribution.
 
@@ -175,7 +176,7 @@ class BaseStats(Rotation):
         rotation_df['d2'] = d2
         rotation_df['is_dot'] = is_dot
 
-        super().__init__(rotation_df, t, convolve_all)
+        super().__init__(rotation_df, t, convolve_all, delta)
         pass
 
     def auto_attack_d2(self, potency, ap_adjust=0, stat_override=None):
@@ -222,7 +223,7 @@ class BaseStats(Rotation):
 
 class Healer(BaseStats):
     def __init__(self, mind, intelligence, vitality, strength, dexterity, det, 
-                 skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+                 skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay, level=90) -> None:
         """
         Set healer-specific stats with this class like main stat, traits, etc.
 
@@ -242,18 +243,20 @@ class Healer(BaseStats):
         delay - weapon delay stat
         """
         super().__init__(mind, 130, mind, mind, intelligence, vitality, strength, dexterity, det,
-                         tenacity, crit_stat, dh_stat, spell_speed, skill_speed, weapon_damage, delay)
+                         tenacity, crit_stat, dh_stat, spell_speed, skill_speed, weapon_damage, delay, level=90)
 
         self.auto_trait = 100
         self.atk_mod = 195
+        self.job_attribute = 115
+
         self.dot_speed_stat = spell_speed
         self.auto_speed_stat = skill_speed
         self.add_role('Healer')
         pass
 
 # class Tank(BaseStats):
-#     def __init__(self, mind, intelligence, vitality, strength, dexterity,
-#                  det, skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+#     def __init__(self, mind:int, intelligence:int, vitality:int, strength:int, dexterity:int,
+#                  det:int, skill_speed:int, spell_speed:int, tenacity:int, crit_stat:int, dh_stat:int, weapon_damage:int, delay, job:str, level=90) -> None:
 #         """
 #         Set tank-specific stats with this class like main stat, traits, etc.
 #         Most importantly this adjusts the attack modifier.
@@ -274,7 +277,14 @@ class Healer(BaseStats):
 #         delay - weapon delay stat
 #         """
 #         super().__init__(strength, 100, strength, mind, intelligence, vitality, strength, dexterity, 
-#                          det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay)   
+#                          det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay, level=90)   
+
+#         if (job.upper() == "WAR") | (job.upper() == "DRK"):
+#             self.job_attribute = 105
+#         elif (job.upper() == "PLD") | (job.upper() == "GNB"):
+#             self.job_attribute = 100
+#         else:
+#             raise ValueError(f"Incorrect job of {job} specified. Values of 'WAR', 'PLD', 'DRK', or 'GNB' are allowed ")
 
 #         self.add_role('Tank')
 #         self.atk_mod = 156
@@ -286,7 +296,7 @@ class Healer(BaseStats):
 
 # class PhysicalRanged(BaseStats):
 #     def __init__(self, mind, intelligence, vitality, strength, dexterity, det, 
-#                  skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+#                  skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay, level=90) -> None:
 #         """
 #         Set physical ranged-specific stats with this class like main stat, traits, etc.
 
@@ -306,7 +316,7 @@ class Healer(BaseStats):
 #         delay - weapon delay stat
 #         """
 #         super().__init__(dexterity, 120, dexterity, mind, intelligence, vitality, strength, dexterity, det, 
-#                          tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay)
+#                          tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay, level=90)
 
 #         self.add_role('Physical Ranged')
         
@@ -316,7 +326,7 @@ class Healer(BaseStats):
 
 # class MagicalRanged(BaseStats):
 #     def __init__(self, mind, intelligence, vitality, strength, dexterity, det, 
-#                  skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+#                  skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay, level=90) -> None:
 #         """
 #         Set magical ranged-specific stats with this class like main stat, traits, etc.
 
@@ -336,7 +346,7 @@ class Healer(BaseStats):
 #         delay - weapon delay stat
 #         """
 #         super().__init__(intelligence, 130, intelligence, mind, intelligence, vitality, strength, dexterity, det, 
-#                          tenacity, crit_stat, dh_stat, spell_speed, skill_speed, weapon_damage, delay)
+#                          tenacity, crit_stat, dh_stat, spell_speed, skill_speed, weapon_damage, delay, level=90)
 
 #         self.add_role('Caster')
         
@@ -347,7 +357,7 @@ class Healer(BaseStats):
 
 # class Melee(BaseStats):
 #     def __init__(self, mind, intelligence, vitality, strength, dexterity,
-#                  det, skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay) -> None:
+#                  det, skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay, level=90) -> None:
 #         """
 #         Set melee-specific stats with this class like main stat, traits, etc.
 
@@ -367,7 +377,7 @@ class Healer(BaseStats):
 #         delay - weapon delay stat
 #         """
 #         super().__init__(strength, 100, strength, mind, intelligence, vitality, strength, dexterity, 
-#                          det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay)
+#                          det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay, level=90)
 
 #         self.add_role('Melee')
         
