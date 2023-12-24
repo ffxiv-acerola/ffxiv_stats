@@ -1,8 +1,8 @@
 import numpy as np
-
+from modifiers import level_mod
 class Rate():
 
-    def __init__(self, crit_amt, dh_amt) -> None:
+    def __init__(self, crit_amt, dh_amt, level=90) -> None:
         """
         Get probabilities of different hit types given critical hit and direct hit rate stats.
         """
@@ -10,6 +10,11 @@ class Rate():
         self.dh_amt = dh_amt
         self.p = self.get_p()
         self.l_c = self.crit_dmg_multiplier()
+
+        self.lvl_main = level_mod[level]["lvl_main"]
+        self.lvl_sub = level_mod[level]["lvl_sub"]
+        self.lvl_div = level_mod[level]["lvl_div"]
+
         pass
 
     def crit_dmg_multiplier(self) -> float:
@@ -22,7 +27,7 @@ class Rate():
         returns:
         critical hit damage multiplier
         """
-        return np.floor(200/1900 * (self.crit_amt - 400) + 1400)
+        return np.floor(200/self.lvl_div * (self.crit_amt - self.lvl_sub) + 1400)
 
     def crit_prob(self) -> float:
         """
@@ -34,7 +39,7 @@ class Rate():
         returns:
         critical hit probability, from [0,1]
         """
-        return np.floor(200/1900 * (self.crit_amt - 400) + 50) / 1000
+        return np.floor(200/self.lvl_div * (self.crit_amt - self.lvl_sub) + 50) / 1000
 
     def direct_hit_prob(self) -> float:
         """
@@ -46,7 +51,7 @@ class Rate():
         returns:
         direct hit probability, from [0,1]
         """
-        return np.floor(550/1900 * (self.dh_amt - 400)) / 1000
+        return np.floor(550/self.lvl_div * (self.dh_amt - self.lvl_sub)) / 1000
 
     def get_p(self, ch_mod=0, dh_mod=0, keep_cd=True):
         """
