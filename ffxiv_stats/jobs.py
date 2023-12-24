@@ -127,7 +127,7 @@ class BaseStats(Rotation):
         # TODO: add GCD (probably not essential?)
         pass
 
-    def attach_rotation(self, rotation_df, t, convolve_all=False):
+    def attach_rotation(self, rotation_df, t, convolve_all=False, delta=250):
         """
         Attach a rotation data frame and compute the corresponding DPS distribution.
 
@@ -176,7 +176,7 @@ class BaseStats(Rotation):
         rotation_df['d2'] = d2
         rotation_df['is_dot'] = is_dot
 
-        super().__init__(rotation_df, t, convolve_all)
+        super().__init__(rotation_df, t, convolve_all, delta)
         pass
 
     def auto_attack_d2(self, potency, ap_adjust=0, stat_override=None):

@@ -287,7 +287,8 @@ class Rotation():
                      is_dot: boolean or 0/1, whether the action is a damage over time effect.
         t: float, time elapsed in seconds. Set t=1 to get damage dealt instead of DPS.
         convolve_all: bool, whether to compute all DPS distributions by convolutions (normally actions with large n can be computed with a skew normal distribution).
-        delta: int, step size for damage grid used in convolving unique action distributions together.
+        delta: int, step size for damage grid used in convolving unique action distributions together. How large delta can be will depend on the the damage span
+                    of a unique action (all hits normal to all hits critical direct). Values between 100-1000 are generally sufficient.
         """
         column_check = set(["base_action", "action_name"])
         missing_columns = column_check - set(rotation_df.columns)
