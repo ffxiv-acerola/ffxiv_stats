@@ -268,7 +268,7 @@ class ActionMoments(Support):
 
 class Rotation():
 
-    def __init__(self, rotation_df, t, convolve_all=False) -> None:
+    def __init__(self, rotation_df, t, convolve_all=False, delta=250) -> None:
         """
         Get damage variability for a rotation.
 
@@ -287,6 +287,7 @@ class Rotation():
                      is_dot: boolean or 0/1, whether the action is a damage over time effect.
         t: float, time elapsed in seconds. Set t=1 to get damage dealt instead of DPS.
         convolve_all: bool, whether to compute all DPS distributions by convolutions (normally actions with large n can be computed with a skew normal distribution).
+        delta: int, step size for damage grid used in convolving unique action distributions together.
         """
         column_check = set(["base_action", "action_name"])
         missing_columns = column_check - set(rotation_df.columns)
@@ -296,6 +297,7 @@ class Rotation():
         self.rotation_df = rotation_df
         self.t = t
         self.convolve_all = convolve_all
+        self.delta = delta
 
         self.action_moments = [ActionMoments(row, t) for _, row in rotation_df.iterrows()]
         self.action_names = rotation_df['action_name'].tolist()
@@ -341,7 +343,6 @@ class Rotation():
         # The major consideration for coarsening is when to coarsen and by how much. 
         # Coarsening leads to a greater reduction in computational efficiency when N becomes large.
         # All action distributions are initially convolved in steps of 1 damage n_hit times.
-        # TODO: test this
         # Unique action distributions are also convolved in steps of 1 damage, and then coarsened.
 
         # The action with the smallest damage span will limit how much the support can be coarsened by.
