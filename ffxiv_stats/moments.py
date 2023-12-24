@@ -461,20 +461,88 @@ class Rotation():
         Convolve the single-hit PMF of a action n_hit times to get the exact PMF of an action landing n_hits.
         
         Inputs:
-        action_idx
+        action_idx - index of an action to compute the damage distribution for
+
+        returns:
+        dmg_support - np array of the damage support
+        conv_pmf - damage distribution for action landing n hits
         """
 
-        def multi_conv(pmf, n_hits):
+        def convolve_by_partitions(one_hit_pmf, n):
             """
+            Self-convolve a 1-hit damage distribution to yield an n-hit damage distribution.
+            This is efficiently performed by splitting n into partitions and convolving the 1-hit damage
+            distribution by these partitions, significantly reducing the number of convolutions which
+            needs to be performed.
+
+            inputs:
+            one_hit_pmf - np array of the damage distribution for one hit
+            n - number of hits
+
+            returns damage distribution for action landing n hits
+            """
+            def partition_n(n):
+                """
+                Iteratively split integer n into partitions by dividing by 2 until 1 is reached.
+                """
+                if n % 2 == 0:
+                    a = n // 2
+                    b = n // 2
+
+                else:
+                    a = (n+1) // 2
+                    b = (n-1) // 2
+                
+                return a, b
             
-            """
-            if n_hits == 1:
-                return pmf
-            else:
-                conv_pmf = fftconvolve(pmf, pmf)
-                for _ in range(n_hits-2):
-                    conv_pmf = fftconvolve(conv_pmf, pmf)
-                return conv_pmf
+            # The list of partitions are first computed by dividing by 2 
+            # (and adding or subtracting 1 for negative numbers)
+
+            # Example: 13 -> {1, 2, 3, 6, 7, 13}
+            # From the comment in https://math.stackexchange.com/questions/2114575/partitions-of-n-that-generate-all-numbers-smaller-than-n
+            # I once studied this problem and found a constructive partition method. Here is the brief. We are given a positive integer n. 
+            # STEP ONE: if n is an even number, partition it into A=n2 and B=n2; otherwise, partition it into A=n+12 and B=n−12. 
+            # STEP TWO: re-partition B into A1 and B1. 
+            # STEP THREE: re-partition B1......Until we get 1. 
+            # I didn't prove this method always works but I believe it is valid
+            a, b = partition_n(n)
+            partition_set = set((a, b))
+            while b > 1:
+                a, b = partition_n(b)
+                partition_set.update((a, b))
+
+            # Happens if n = 1, just remove 0
+            if 0 in partition_set:
+                partition_set = partition_set.difference({0})
+
+            # Also add n to the set for easy looping
+            partition_set.update([n])
+            partition_set = sorted(list(partition_set))
+
+            # Now convolve according to the partition set
+            # Keep track of results in a dictionary
+            convolve_dict = {
+                1: one_hit_pmf
+            }
+
+            # How to sum up the partitions to yield n sounds complicated, but there's only 3 cases
+            for a in range(len(partition_set) - 1):
+                # Self-add: e.g., 1 + 1 = 2
+                if partition_set[a] + partition_set[a] == partition_set[a+1]:
+                    # print(f"a = {partition_set[a]}: self add {partition_set[a]} + {partition_set[a]}")
+                    convolve_dict[partition_set[a+1]] = fftconvolve(convolve_dict[partition_set[a]], convolve_dict[partition_set[a]]) 
+
+                # Add to previous partition: e.g., 7 + 6 = 13
+                elif (a > 0) & (partition_set[a-1] + partition_set[a] == partition_set[a+1]):
+                    # print(f"a = {partition_set[a]}: prev add {partition_set[a-1]} + {partition_set[a]}")
+                    convolve_dict[partition_set[a+1]] = fftconvolve(convolve_dict[partition_set[a-1]], convolve_dict[partition_set[a]])
+                
+                # Add one: e.g., 6 + 1 = 7
+                elif (a > 0 ) & (partition_set[a] + partition_set[0] == partition_set[a+1]):
+                    # print(f"a = {partition_set[a]}: 1 add {partition_set[0]} + {partition_set[a]}")
+                    convolve_dict[partition_set[a+1]] = fftconvolve(convolve_dict[partition_set[0]], convolve_dict[partition_set[a]])
+
+            return convolve_dict[n]
 
         # make a shorter variable name cause this long
         action_moment = self.action_moments[action_idx]
@@ -504,7 +572,7 @@ class Rotation():
         self.one_hit_pmf[dh_slice] = action_moment.p[2] / action_moment.dir_supp.size
         self.one_hit_pmf[cdh_slice] = action_moment.p[3] / action_moment.crit_dir_supp.size
 
-        conv_pmf = multi_conv(self.one_hit_pmf, action_moment.n)
+        conv_pmf = convolve_by_partitions(self.one_hit_pmf, action_moment.n)
         lowest_roll = int(np.floor(action_moment.normal_supp[0])*action_moment.n)
 
         dmg_supp = np.arange(lowest_roll, conv_pmf.size + lowest_roll, step=1).astype(float)
