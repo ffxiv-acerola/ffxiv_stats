@@ -268,7 +268,7 @@ class ActionMoments(Support):
 
 class Rotation():
 
-    def __init__(self, rotation_df, t, convolve_all=False, delta=250) -> None:
+    def __init__(self, rotation_df, t, convolve_all=False, delta:int=250) -> None:
         """
         Get damage variability for a rotation.
 
@@ -296,7 +296,11 @@ class Rotation():
                 
         self.rotation_df = rotation_df
         self.t = t
+        # Deprecated/currently unused
         self.convolve_all = convolve_all
+        # Damage is discretized by this much.
+        # Bigger number = faster but larger discretization error
+        # Smaller number = slower but more accurate.
         self.delta = delta
 
         self.action_moments = [ActionMoments(row, t) for _, row in rotation_df.iterrows()]
@@ -354,11 +358,6 @@ class Rotation():
         # A future update might work on dynamically setting this value, or allow for different spacings,
         # which are unified at the very end. 
 
-        # Damage is discretized by this much.
-        # Bigger number = faster but larger discretization error
-        # Smaller number = slower but more accurate.
-        delta = 250
-
         # section (i), individual actions
         self.action_dps_support = [None] * self.action_means.size
         self.action_dps_distributions = [None] * self.action_means.size
@@ -400,7 +399,7 @@ class Rotation():
             
             # Coarsen support in prep for rotation distribution
             uncoarsened_supported = np.arange(action_low_high[:,0].sum(), action_low_high[:,1].sum() + 1, step=1)
-            coarsened_support = np.arange(action_low_high[:,0].sum(), action_low_high[:,1].sum() + delta, step=delta)
+            coarsened_support = np.arange(action_low_high[:,0].sum(), action_low_high[:,1].sum() + self.delta, step=self.delta)
             action_dps_distribution = np.interp(coarsened_support, uncoarsened_supported, action_dps_distribution)
 
             self.unique_actions_distribution[name] = {'support': coarsened_support, 'dps_distribution': action_dps_distribution}
@@ -426,7 +425,7 @@ class Rotation():
                                                              self.rotation_dps_distribution)
 
         # Create support and convert to DPS
-        self.rotation_dps_support = np.arange(rotation_lower_bound, rotation_upper_bound+delta, step=delta).astype(float) / self.t
+        self.rotation_dps_support = np.arange(rotation_lower_bound, rotation_upper_bound+self.delta, step=self.delta).astype(float) / self.t
         # And renormalize the DPS distribution
         self.rotation_dps_distribution /= np.trapz(self.rotation_dps_distribution, self.rotation_dps_support)
 
