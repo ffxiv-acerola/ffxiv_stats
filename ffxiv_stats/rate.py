@@ -1,20 +1,19 @@
 import numpy as np
-from modifiers import level_mod
+from .modifiers import level_mod
 class Rate():
 
     def __init__(self, crit_amt, dh_amt, level=90) -> None:
         """
         Get probabilities of different hit types given critical hit and direct hit rate stats.
         """
-        self.crit_amt = crit_amt
-        self.dh_amt = dh_amt
-        self.p = self.get_p()
-        self.l_c = self.crit_dmg_multiplier()
-
         self.lvl_main = level_mod[level]["lvl_main"]
         self.lvl_sub = level_mod[level]["lvl_sub"]
         self.lvl_div = level_mod[level]["lvl_div"]
 
+        self.crit_amt = crit_amt
+        self.dh_amt = dh_amt
+        self.p = self.get_p()
+        self.l_c = self.crit_dmg_multiplier()
         pass
 
     def crit_dmg_multiplier(self) -> float:

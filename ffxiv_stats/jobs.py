@@ -3,7 +3,7 @@ from numpy import floor as nf
 import pandas as pd
 
 from .moments import Rotation
-from modifiers import level_mod
+from .modifiers import level_mod
 
 class BaseStats(Rotation):
 
