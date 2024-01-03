@@ -1,7 +1,8 @@
 import numpy as np
 from .modifiers import level_mod
-class Rate():
 
+
+class Rate:
     def __init__(self, crit_amt, dh_amt, level=90) -> None:
         """
         Get probabilities of different hit types given critical hit and direct hit rate stats.
@@ -18,7 +19,7 @@ class Rate():
 
     def crit_dmg_multiplier(self) -> float:
         """
-        Get the damage multiplier for landing a critical hit 
+        Get the damage multiplier for landing a critical hit
 
         inputs:
         crit_amt: int, critical hit stat
@@ -26,11 +27,11 @@ class Rate():
         returns:
         critical hit damage multiplier
         """
-        return np.floor(200/self.lvl_div * (self.crit_amt - self.lvl_sub) + 1400)
+        return np.floor(200 / self.lvl_div * (self.crit_amt - self.lvl_sub) + 1400)
 
     def crit_prob(self) -> float:
         """
-        Get the probability of landing a critical hit 
+        Get the probability of landing a critical hit
 
         inputs:
         crit_amt: int, critical hit stat
@@ -38,11 +39,11 @@ class Rate():
         returns:
         critical hit probability, from [0,1]
         """
-        return np.floor(200/self.lvl_div * (self.crit_amt - self.lvl_sub) + 50) / 1000
+        return np.floor(200 / self.lvl_div * (self.crit_amt - self.lvl_sub) + 50) / 1000
 
     def direct_hit_prob(self) -> float:
         """
-        Get the probability of landing a direct hit 
+        Get the probability of landing a direct hit
 
         inputs:
         crit_amt: int, direct hit stat
@@ -50,7 +51,7 @@ class Rate():
         returns:
         direct hit probability, from [0,1]
         """
-        return np.floor(550/self.lvl_div * (self.dh_amt - self.lvl_sub)) / 1000
+        return np.floor(550 / self.lvl_div * (self.dh_amt - self.lvl_sub)) / 1000
 
     def get_p(self, ch_mod=0, dh_mod=0, keep_cd=True):
         """
@@ -60,10 +61,10 @@ class Rate():
         crit_amt: Amount of critical hit stat.
         dh_amt: Amount of direct hit rate stat.
         ch_mod: Percentage to increase the base critical hit rate by if buffs are present.
-                E.g., ch_mod=0.1 would add 0.1 to the base critical hit rate   
+                E.g., ch_mod=0.1 would add 0.1 to the base critical hit rate
         dh_mod: Percentage to increase the base direct hit rate by if buffs are present.
         keep_cd: bool, Exploratory argument to see what happens critical-direct hits are removed.
-                 THIS SHOULD ALWAYS BE TRUE IF FOR IN GAME CALCULATIONS. 
+                 THIS SHOULD ALWAYS BE TRUE IF FOR IN GAME CALCULATIONS.
                  If true, the probability is p_c*p_d, otherwise 0
 
         returns:
@@ -75,14 +76,20 @@ class Rate():
         # Using the Decimal class with arbitrary precision and then converting them back to a float remedies this I guess.
         # Floating point math is stupid.
         from decimal import Decimal
+
         p_c = Decimal(self.crit_prob() + ch_mod)
         p_d = Decimal(self.direct_hit_prob() + dh_mod)
         if keep_cd:
             p_cd = Decimal(p_c) * Decimal(p_d)
-        
+
         else:
             p_cd = Decimal(0)
 
-        return np.array([float(Decimal(1.0) - p_c - p_d + p_cd), float(p_c - p_cd), float(p_d - p_cd), float(p_cd)])
-
-
+        return np.array(
+            [
+                float(Decimal(1.0) - p_c - p_d + p_cd),
+                float(p_c - p_cd),
+                float(p_d - p_cd),
+                float(p_cd),
+            ]
+        )
