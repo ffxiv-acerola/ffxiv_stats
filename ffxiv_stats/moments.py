@@ -648,7 +648,6 @@ class Rotation:
             self.action_dps_distributions[idx] /= np.trapz(
                 self.action_dps_distributions[idx], self.action_dps_support[idx]
             )
-            print(idx)
 
         for u in unique_action_names:
             self.unique_actions_distribution[u]["support"] /= self.t
