@@ -635,12 +635,20 @@ class Rotation:
         )
 
         # Now all the damage distributions have been computed, can convert to DPS
-        # action dps distributions
+        # action dps distributions. We also coarsen the support to 0.5 DPS
+        # or else this uses a lot of memory
         for idx in range(len(self.action_dps_distributions)):
-            self.action_dps_support[idx] /= self.t
+            lower, upper = self.action_dps_support[idx][0] / self.t, self.action_dps_support[idx][-1] / self.t 
+            # Some actions like healer autos don't span a large DPS range and don't need to be coarsened.
+            if upper - lower > 10:
+                new_action_support = np.arange(int(lower), int(upper) + 0.5, step=0.5)
+                self.action_dps_distributions[idx] = np.interp(new_action_support, self.action_dps_support[idx] / self.t, self.action_dps_distributions[idx])
+                self.action_dps_support[idx] = new_action_support
+
             self.action_dps_distributions[idx] /= np.trapz(
                 self.action_dps_distributions[idx], self.action_dps_support[idx]
             )
+            print(idx)
 
         for u in unique_action_names:
             self.unique_actions_distribution[u]["support"] /= self.t
@@ -900,17 +908,7 @@ class Rotation:
         else:
             return_ax = True
 
-        alpha, omega, squigma = self.moments_to_skew_norm(
-            self.rotation_mean, self.rotation_variance, self.rotation_skewness
-        )
-        x = np.linspace(
-            self.rotation_mean - 5 * self.rotation_std,
-            self.rotation_mean + 5 * self.rotation_std,
-            100,
-        )
-        y = skewnorm.pdf(x, alpha, squigma, omega)
-
-        ax.plot(x, y, **kwargs)
+        ax.plot(self.rotation_dps_support, self.rotation_dps_distribution, **kwargs)
         ax.set_xlabel("Damage per Second (DPS)")
 
         if return_ax:
