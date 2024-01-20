@@ -406,44 +406,44 @@ class Healer(BaseStats):
         pass
 
 
-# class Tank(BaseStats):
-#     def __init__(self, mind:int, intelligence:int, vitality:int, strength:int, dexterity:int,
-#                  det:int, skill_speed:int, spell_speed:int, tenacity:int, crit_stat:int, dh_stat:int, weapon_damage:int, delay, job:str, level=90) -> None:
-#         """
-#         Set tank-specific stats with this class like main stat, traits, etc.
-#         Most importantly this adjusts the attack modifier.
+class Tank(BaseStats):
+    def __init__(self, mind:int, intelligence:int, vitality:int, strength:int, dexterity:int,
+                 det:int, skill_speed:int, spell_speed:int, tenacity:int, crit_stat:int, dh_stat:int, weapon_damage:int, delay, job:str, level=90) -> None:
+        """
+        Set tank-specific stats with this class like main stat, traits, etc.
+        Most importantly this adjusts the attack modifier.
 
-#         inputs:
-#         mind - int, mind stat
-#         intelligence - int, intelligence stat
-#         vitality - int, vitality stat
-#         strength, - int, strength stat
-#         dexterity - int, strength stat
-#         det - int, determination stat
-#         skill_speed - int, skill speed stat
-#         spell_speed - int, spell speed stat
-#         tenacity - tenacity stat
-#         crit_stat - critical hit stat
-#         dh_stat - direct hit rate stat
-#         weapon_damage - weapon damage stat
-#         delay - weapon delay stat
-#         """
-#         super().__init__(strength, 100, strength, mind, intelligence, vitality, strength, dexterity,
-#                          det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay, level=90)
+        inputs:
+        mind - int, mind stat
+        intelligence - int, intelligence stat
+        vitality - int, vitality stat
+        strength, - int, strength stat
+        dexterity - int, strength stat
+        det - int, determination stat
+        skill_speed - int, skill speed stat
+        spell_speed - int, spell speed stat
+        tenacity - tenacity stat
+        crit_stat - critical hit stat
+        dh_stat - direct hit rate stat
+        weapon_damage - weapon damage stat
+        delay - weapon delay stat
+        """
+        super().__init__(strength, 100, strength, mind, intelligence, vitality, strength, dexterity,
+                         det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay, level=90)
 
-#         if (job.upper() == "WAR") | (job.upper() == "DRK"):
-#             self.job_attribute = 105
-#         elif (job.upper() == "PLD") | (job.upper() == "GNB"):
-#             self.job_attribute = 100
-#         else:
-#             raise ValueError(f"Incorrect job of {job} specified. Values of 'WAR', 'PLD', 'DRK', or 'GNB' are allowed ")
+        if (job.upper() == "WAR") | (job.upper() == "DRK"):
+            self.job_attribute = 105
+        elif (job.upper() == "PLD") | (job.upper() == "GNB"):
+            self.job_attribute = 100
+        else:
+            raise ValueError(f"Incorrect job of {job} specified. Values of 'WAR', 'PLD', 'DRK', or 'GNB' are allowed ")
 
-#         self.add_role('Tank')
-#         self.atk_mod = 156
+        self.add_role('Tank')
+        self.atk_mod = 156
 
-#         self.skill_speed = skill_speed
-#         self.spell_speed = spell_speed
-#         pass
+        self.skill_speed = skill_speed
+        self.spell_speed = spell_speed
+        pass
 
 
 # class PhysicalRanged(BaseStats):
