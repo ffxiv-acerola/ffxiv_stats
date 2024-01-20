@@ -25,11 +25,15 @@ class BaseStats(Rotation):
         auto_speed_stat,
         weapon_damage,
         delay,
+        pet_job_attribute=None,
+        pet_main_stat_adjust=None,
+        pet_trait=None,
+        pet_atk_mod=195,
         level=90,
     ) -> None:
         """
         Base class for converting potency to base damage dealt. Not meant to be used alone.
-        Instead use a `ROLE` class, which inherits this class.
+        Instead use a `ROLE` class, which inherits this class and applies/sets the correct attributes and stats.
         """
         # Level dependent parameters
         # currently for lvl 90
@@ -38,7 +42,7 @@ class BaseStats(Rotation):
         self.lvl_div = level_mod[level]["lvl_div"]
         self.job_attribute = 115
         # Set this to 156 if tank
-        self.atk_mod = 190
+        self.atk_mod = 195
 
         self.main_stat = main_stat
         self.mind = mind
@@ -62,6 +66,13 @@ class BaseStats(Rotation):
 
         self.auto_speed_stat = auto_speed_stat
         self.delay = delay
+
+        # Pet attributes, if not specified, pet methods will not work
+        # Python formatter makes this a tuple, IDK why.
+        self.pet_job_attribute = (pet_job_attribute,)
+        self.pet_main_stat_adjust = (pet_main_stat_adjust,)
+        self.pet_trait = (pet_trait,)
+        self.pet_atk_mod = (pet_atk_mod,)
 
         self.attack_multiplier = self.f_atk()
         self.determination_multiplier = self.f_det()
@@ -157,6 +168,54 @@ class BaseStats(Rotation):
     def get_gcd(self):
         # TODO: add GCD (probably not essential?)
         pass
+
+    @staticmethod
+    def undo_main_stat_party_bonus(percent_bonus, main_stat_with_bonus):
+        """
+        Estimate how much main stat is applied by the party bonus.
+        Used for subtracting out for pet potency.
+        It is an estimate because of floor rounding, but should be within 1 point.
+        """
+        main_stat_with_bonus = 3037
+        percent_bonus = 1.03
+        undone_stat_float = main_stat_with_bonus / percent_bonus
+
+        # Try to account for integer math by taking the floor and ceiling and seeing which one leads to the correct party bonus value
+        floored_undone_stat = int(np.floor(undone_stat_float))
+        ceilinged_undone_stat = int(np.ceil(undone_stat_float))
+
+        if np.floor(floored_undone_stat * percent_bonus) == main_stat_with_bonus:
+            return floored_undone_stat
+
+        else:
+            return ceilinged_undone_stat
+
+    pass
+
+    def pet_f_wd(self):
+        """
+        Calculate weapon damage multiplier.
+        """
+        return np.floor(
+            (self.lvl_main * self.pet_job_attribute / 1000) + self.weapon_damage
+        )
+
+    def pet_f_atk(self, ap_adjust=0):
+        """
+        Calculate attack multiplier.
+
+        Inputs
+        ap_adjust - int, additional amount to add to attack power (main stat). Used to account for medication.
+        """
+        total_ap_adjust = ap_adjust + self.pet_main_stat_adjust
+        return (
+            np.floor(
+                self.pet_atk_mod
+                * ((self.attack_power + total_ap_adjust) - self.lvl_main)
+                / self.lvl_main
+            )
+            + 100
+        )
 
     def attach_rotation(self, rotation_df, t, convolve_all=False, delta=250):
         """
@@ -339,6 +398,25 @@ class BaseStats(Rotation):
                 + 1
             )
 
+    def pet_direct_d2(self, potency, ap_adjust=0):
+        """
+        Get base damage of direct damage before any variability.
+        Can be called directly or is automatically called b y the `attach_rotation` method.
+
+        inputs:
+        potency - int, potency of an attack
+        ap_adjust - int, amount of main stat to add. Used to account for medication.
+        """
+        d1 = nf(nf(nf(potency * self.pet_f_atk(ap_adjust) * self.f_det()) / 100) / 1000)
+
+        return nf(
+            nf(
+                nf(nf(nf(nf(d1 * self.f_ten()) / 1000) * self.pet_f_wd()) / 100)
+                * self.pet_trait
+            )
+            / 100
+        )
+
 
 class Healer(BaseStats):
     def __init__(
@@ -356,6 +434,10 @@ class Healer(BaseStats):
         dh_stat,
         weapon_damage,
         delay,
+        pet_job_attribute=None,
+        pet_main_stat_adjust=None,
+        pet_trait=None,
+        pet_atk_mod=195,
         level=90,
     ) -> None:
         """
@@ -375,6 +457,11 @@ class Healer(BaseStats):
         dh_stat - direct hit rate stat
         weapon_damage - weapon damage stat
         delay - weapon delay stat
+        pet_job_attribute - optional, pet-based job attribute. For Earthly Star in EW, this is 115.
+        pet_main_stat_adjust - amount to adjust attack power by. For Earthly Star in EW, this is 0.
+        pet_trait - optional, pet-based trait bonus. For Earthly Star in EW, this is 134 (Maim and Mend + 4% hidden).
+        pet_atk_mod - optional, pet-based attack modifier. For Earthly Star in EW, this is 195.
+        level - Player level, default of 90, can be 70, 80, or 90.
         """
         super().__init__(
             mind,
@@ -393,7 +480,11 @@ class Healer(BaseStats):
             skill_speed,
             weapon_damage,
             delay,
-            level=90,
+            pet_job_attribute,
+            pet_main_stat_adjust,
+            pet_trait,
+            pet_atk_mod,
+            level=level,
         )
 
         self.auto_trait = 100
@@ -407,8 +498,28 @@ class Healer(BaseStats):
 
 
 class Tank(BaseStats):
-    def __init__(self, mind:int, intelligence:int, vitality:int, strength:int, dexterity:int,
-                 det:int, skill_speed:int, spell_speed:int, tenacity:int, crit_stat:int, dh_stat:int, weapon_damage:int, delay, job:str, level=90) -> None:
+    def __init__(
+        self,
+        mind: int,
+        intelligence: int,
+        vitality: int,
+        strength: int,
+        dexterity: int,
+        det: int,
+        skill_speed: int,
+        spell_speed: int,
+        tenacity: int,
+        crit_stat: int,
+        dh_stat: int,
+        weapon_damage: int,
+        delay: float,
+        job: str,
+        pet_job_attribute=None,
+        pet_main_stat_adjust=None,
+        pet_trait=None,
+        pet_atk_mod=195,
+        level=90,
+    ) -> None:
         """
         Set tank-specific stats with this class like main stat, traits, etc.
         Most importantly this adjusts the attack modifier.
@@ -427,18 +538,49 @@ class Tank(BaseStats):
         dh_stat - direct hit rate stat
         weapon_damage - weapon damage stat
         delay - weapon delay stat
+        job - job name, required to correctly set job modifier. Follow FFLogs job naming API convention:
+              "Warrior", "Paladin", "DarkKnight", or "Gunbreaker".
+        pet_job_attribute - optional, pet-based job attribute. For Living Shadow in EW, this is 100.
+        pet_main_stat_adjust - amount to adjust attack power by. For Living Shadow, this is the difference between strength racial bonus
+                               between the player's race and a midlander (+3). 
+        pet_trait - optional, pet-based trait bonus. For Living Shadow in EW, this is 100
+        pet_atk_mod - optional, pet-based attack modifier. For Living Shadow in EW, this is 195
+        level - Player level, default of 90, can be 70, 80, or 90.
         """
-        super().__init__(strength, 100, strength, mind, intelligence, vitality, strength, dexterity,
-                         det, tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay, level=90)
+        super().__init__(
+            strength,
+            100,
+            strength,
+            mind,
+            intelligence,
+            vitality,
+            strength,
+            dexterity,
+            det,
+            tenacity,
+            crit_stat,
+            dh_stat,
+            skill_speed,
+            skill_speed,
+            weapon_damage,
+            delay,
+            pet_job_attribute,
+            pet_main_stat_adjust,
+            pet_trait,
+            pet_atk_mod,
+            level=level,
+        )
 
-        if (job.upper() == "WAR") | (job.upper() == "DRK"):
+        if (job == "Warrior") | (job == "DarkKnight"):
             self.job_attribute = 105
-        elif (job.upper() == "PLD") | (job.upper() == "GNB"):
+        elif (job == "Paladin") | (job == "Gunbreaker"):
             self.job_attribute = 100
         else:
-            raise ValueError(f"Incorrect job of {job} specified. Values of 'WAR', 'PLD', 'DRK', or 'GNB' are allowed ")
+            raise ValueError(
+                f"Incorrect job of {job} specified. Values of 'Warrior', 'Paladin', 'DarkKnight', or 'Gunbreaker' are allowed "
+            )
 
-        self.add_role('Tank')
+        self.add_role("Tank")
         self.atk_mod = 156
 
         self.skill_speed = skill_speed
