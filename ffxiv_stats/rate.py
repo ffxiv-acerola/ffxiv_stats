@@ -53,7 +53,7 @@ class Rate:
         """
         return np.floor(550 / self.lvl_div * (self.dh_amt - self.lvl_sub)) / 1000
 
-    def get_p(self, ch_mod=0, dh_mod=0, keep_cd=True):
+    def get_p(self, ch_mod=0, dh_mod=0, guaranteed_hit_type=0):
         """
         Get the probability of each hit type occurring given the probability of a critical hit and direct hit
 
@@ -63,33 +63,42 @@ class Rate:
         ch_mod: Percentage to increase the base critical hit rate by if buffs are present.
                 E.g., ch_mod=0.1 would add 0.1 to the base critical hit rate
         dh_mod: Percentage to increase the base direct hit rate by if buffs are present.
-        keep_cd: bool, Exploratory argument to see what happens critical-direct hits are removed.
-                 THIS SHOULD ALWAYS BE TRUE IF FOR IN GAME CALCULATIONS.
-                 If true, the probability is p_c*p_d, otherwise 0
+        guaranteed_hit_type: get probability for a guaranteed hit type. 
+                             Parameters ch_mod and dh_mod have no effect if this is non-zero
+                             0 - no hit type guaranteed
+                             1 - guaranteed critical hit
+                             2 - guaranteed direct hit
+                             3 - guaranteed critical-direct hit
 
         returns:
         probability of each hit type, [normal hit, critical hit given not CD hit, direct hit given not CDH hit, CDH hit]
         """
+        # Floating point error can be resolved with round
+        # Probabilities in FFXIV only use 3 significant digits because of flooring
+        # The most number of significant digits is 6 for critical direct hits,
+        # since it's a product of critical hit (3) and direct hit (3) = 6 sig digits
+        # Just use 10 cause yolo, p sums to 1
 
-        # Sometimes the probabilities don't sum to exactly 1.0 because of floating point error.
-        # Sometimes SciPy's multinomial class will break because of that and just return NaN for probabilities.
-        # Using the Decimal class with arbitrary precision and then converting them back to a float remedies this I guess.
-        # Floating point math is stupid.
-        from decimal import Decimal
+        # Why does p have to sum to 1 without any floating point error?
+        # scipy's multinomial weights will return nan if they do not.
+        p_c = round(self.crit_prob() + ch_mod, 10)
+        p_d = round(self.direct_hit_prob() + dh_mod, 10)
 
-        p_c = Decimal(self.crit_prob() + ch_mod)
-        p_d = Decimal(self.direct_hit_prob() + dh_mod)
-        if keep_cd:
-            p_cd = Decimal(p_c) * Decimal(p_d)
 
-        else:
-            p_cd = Decimal(0)
+        if guaranteed_hit_type == 1:
+            p_c = 1.
+        elif guaranteed_hit_type == 2:
+            p_d = 1.
+        elif guaranteed_hit_type == 3:
+            return np.array([0, 0, 0, 1.])
+        
+        p_cd = round(p_c * p_d, 10)
 
         return np.array(
             [
-                float(Decimal(1.0) - p_c - p_d + p_cd),
-                float(p_c - p_cd),
-                float(p_d - p_cd),
-                float(p_cd),
+                round(1.0 - p_c - p_d + p_cd, 10),
+                round(p_c - p_cd, 10),
+                round(p_d - p_cd, 10),
+                p_cd,
             ]
         )
