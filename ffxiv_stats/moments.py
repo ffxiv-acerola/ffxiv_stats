@@ -759,7 +759,7 @@ class Rotation:
 
         # `self.rotation_dps_distribution` needs to first be defined by convolving the first two unique actions together
         # then we can loop starting at the second index.
-        if len(self.action_moments) > 1:
+        if len(unique_action_names) > 1:
             self.rotation_dps_distribution = fftconvolve(
                 self.unique_actions_distribution[unique_action_names[0]][
                     "dps_distribution"
@@ -775,7 +775,7 @@ class Rotation:
             ]["dps_distribution"]
 
         # Now loop
-        if len(self.action_moments) > 2:
+        if len(unique_action_names) > 2:
             for a in range(2, len(unique_action_names)):
                 self.rotation_dps_distribution = fftconvolve(
                     self.unique_actions_distribution[unique_action_names[a]][
@@ -800,11 +800,18 @@ class Rotation:
         # action dps distributions. We also coarsen the support to 0.5 DPS
         # or else this uses a lot of memory
         for idx in range(len(self.action_dps_distributions)):
-            lower, upper = self.action_dps_support[idx][0] / self.t, self.action_dps_support[idx][-1] / self.t 
+            lower, upper = (
+                self.action_dps_support[idx][0] / self.t,
+                self.action_dps_support[idx][-1] / self.t,
+            )
             # Some actions like healer autos don't span a large DPS range and don't need to be coarsened.
             if upper - lower > 10:
                 new_action_support = np.arange(int(lower), int(upper) + 0.5, step=0.5)
-                self.action_dps_distributions[idx] = np.interp(new_action_support, self.action_dps_support[idx] / self.t, self.action_dps_distributions[idx])
+                self.action_dps_distributions[idx] = np.interp(
+                    new_action_support,
+                    self.action_dps_support[idx] / self.t,
+                    self.action_dps_distributions[idx],
+                )
                 self.action_dps_support[idx] = new_action_support
 
             self.action_dps_distributions[idx] /= np.trapz(
