@@ -169,7 +169,7 @@ class Rate:
                 )
                 // 1
             )
-            / 1000,
+            / 1000
         )
         # Divide out the original determination multiplier so it can be treated as a buff
         dh_buff /= (
