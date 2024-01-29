@@ -23,7 +23,6 @@ class BaseStats(Rotation):
         tenacity=400,
         pet_attack_power=None,
         pet_job_attribute=None,
-        pet_main_stat_adjust=None,
         pet_trait=None,
         pet_atk_mod=195,
         level=90,
@@ -61,10 +60,10 @@ class BaseStats(Rotation):
 
         # Pet attributes, if not specified, pet methods will not work
         # Python formatter makes this a tuple, IDK why.
-        self.pet_job_attribute = (pet_job_attribute,)
-        self.pet_main_stat_adjust = (pet_main_stat_adjust,)
-        self.pet_trait = (pet_trait,)
-        self.pet_atk_mod = (pet_atk_mod,)
+        self.pet_job_attribute = pet_job_attribute
+        self.pet_attack_power = pet_attack_power
+        self.pet_trait = pet_trait
+        self.pet_atk_mod = pet_atk_mod
 
         self.attack_multiplier = self.f_atk()
         self.determination_multiplier = self.f_det()
@@ -168,8 +167,6 @@ class BaseStats(Rotation):
         Used for subtracting out for pet potency.
         It is an estimate because of floor rounding, but should be within 1 point.
         """
-        main_stat_with_bonus = 3037
-        percent_bonus = 1.03
         undone_stat_float = main_stat_with_bonus / percent_bonus
 
         # Try to account for integer math by taking the floor and ceiling and seeing which one leads to the correct party bonus value
@@ -199,11 +196,10 @@ class BaseStats(Rotation):
         Inputs
         ap_adjust - int, additional amount to add to attack power (main stat). Used to account for medication.
         """
-        total_ap_adjust = ap_adjust + self.pet_main_stat_adjust
         return (
             np.floor(
                 self.pet_atk_mod
-                * ((self.attack_power + total_ap_adjust) - self.lvl_main)
+                * ((self.pet_attack_power + ap_adjust) - self.lvl_main)
                 / self.lvl_main
             )
             + 100
@@ -270,6 +266,9 @@ class BaseStats(Rotation):
 
                 d2.append(self.auto_attack_d2(row["potency"]), ap_adjust=ap_adjust)
                 is_dot.append(0)
+
+            elif row["damage_type"] == "pet":
+                d2.append(self.pet_direct_d2(row["potency"], ap_adjust=row["main_stat_add"]))
 
             else:
                 raise ValueError(
@@ -429,8 +428,8 @@ class Healer(BaseStats):
         dh_stat,
         weapon_damage,
         delay,
+        pet_attack_power=None,
         pet_job_attribute=None,
-        pet_main_stat_adjust=None,
         pet_trait=None,
         pet_atk_mod=195,
         level=90,
@@ -499,8 +498,8 @@ class Tank(BaseStats):
         weapon_damage: int,
         delay: float,
         job: str,
+        pet_attack_power=None,
         pet_job_attribute=None,
-        pet_main_stat_adjust=None,
         pet_trait=None,
         pet_atk_mod=195,
         level=90,
@@ -561,7 +560,10 @@ class Tank(BaseStats):
             )
 
         self.add_role("Tank")
-        self.atk_mod = 156
+        if level == 90:
+            self.atk_mod = 156
+        if level == 80:
+            self.atk_mod = 115
 
         self.dot_speed_stat = skill_speed
         self.auto_speed_stat = skill_speed
