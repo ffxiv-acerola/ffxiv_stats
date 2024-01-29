@@ -12,19 +12,16 @@ class BaseStats(Rotation):
         attack_power,
         trait,
         main_stat,
-        mind,
-        intelligence,
-        vitality,
-        strength,
-        dexterity,
         det,
-        tenacity,
         crit_stat,
         dh_stat,
         dot_speed_stat,
         auto_speed_stat,
         weapon_damage,
         delay,
+        strength=None,
+        tenacity=400,
+        pet_attack_power=None,
         pet_job_attribute=None,
         pet_main_stat_adjust=None,
         pet_trait=None,
@@ -41,15 +38,10 @@ class BaseStats(Rotation):
         self.lvl_sub = level_mod[level]["lvl_sub"]
         self.lvl_div = level_mod[level]["lvl_div"]
         self.job_attribute = 115
-        # Set this to 156 if tank
         self.atk_mod = 195
 
         self.main_stat = main_stat
-        self.mind = mind
-        self.intelligence = intelligence
-        self.vitality = vitality
         self.strength = strength
-        self.dexterity = dexterity
 
         self.weapon_damage = weapon_damage
         self.attack_power = attack_power
@@ -269,7 +261,14 @@ class BaseStats(Rotation):
                 is_dot.append(1)
 
             elif row["damage_type"] == "auto":
-                d2.append(self.auto_attack_d2(row["potency"]))
+                # Medication doesn't affect healer autos
+                # but it affects all others
+                if isinstance(self, Healer):
+                    ap_adjust = 0
+                else:
+                    ap_adjust = row["main_stat_add"]
+
+                d2.append(self.auto_attack_d2(row["potency"]), ap_adjust=ap_adjust)
                 is_dot.append(0)
 
             else:
@@ -401,7 +400,7 @@ class BaseStats(Rotation):
     def pet_direct_d2(self, potency, ap_adjust=0):
         """
         Get base damage of direct damage before any variability.
-        Can be called directly or is automatically called b y the `attach_rotation` method.
+        Can be called directly or is automatically called by the `attach_rotation` method.
 
         inputs:
         potency - int, potency of an attack
@@ -422,14 +421,10 @@ class Healer(BaseStats):
     def __init__(
         self,
         mind,
-        intelligence,
-        vitality,
         strength,
-        dexterity,
         det,
         skill_speed,
         spell_speed,
-        tenacity,
         crit_stat,
         dh_stat,
         weapon_damage,
@@ -464,26 +459,21 @@ class Healer(BaseStats):
         level - Player level, default of 90, can be 70, 80, or 90.
         """
         super().__init__(
-            mind,
-            130,
-            mind,
-            mind,
-            intelligence,
-            vitality,
-            strength,
-            dexterity,
-            det,
-            tenacity,
-            crit_stat,
-            dh_stat,
-            spell_speed,
-            skill_speed,
-            weapon_damage,
-            delay,
-            pet_job_attribute,
-            pet_main_stat_adjust,
-            pet_trait,
-            pet_atk_mod,
+            attack_power=mind,
+            trait=130,
+            main_stat=mind,
+            strength=strength,
+            det=det,
+            crit_stat=crit_stat,
+            dh_stat=dh_stat,
+            dot_speed_stat=spell_speed,
+            auto_speed_stat=skill_speed,
+            weapon_damage=weapon_damage,
+            delay=delay,
+            pet_attack_power=pet_attack_power,
+            pet_job_attribute=pet_job_attribute,
+            pet_trait=pet_trait,
+            pet_atk_mod=pet_atk_mod,
             level=level,
         )
 
@@ -500,14 +490,9 @@ class Healer(BaseStats):
 class Tank(BaseStats):
     def __init__(
         self,
-        mind: int,
-        intelligence: int,
-        vitality: int,
         strength: int,
-        dexterity: int,
         det: int,
         skill_speed: int,
-        spell_speed: int,
         tenacity: int,
         crit_stat: int,
         dh_stat: int,
@@ -548,26 +533,21 @@ class Tank(BaseStats):
         level - Player level, default of 90, can be 70, 80, or 90.
         """
         super().__init__(
-            strength,
-            100,
-            strength,
-            mind,
-            intelligence,
-            vitality,
-            strength,
-            dexterity,
-            det,
-            tenacity,
-            crit_stat,
-            dh_stat,
-            skill_speed,
-            skill_speed,
-            weapon_damage,
-            delay,
-            pet_job_attribute,
-            pet_main_stat_adjust,
-            pet_trait,
-            pet_atk_mod,
+            attack_power=strength,
+            trait=100,
+            main_stat=strength,
+            det=det,
+            tenacity=tenacity,
+            crit_stat=crit_stat,
+            dh_stat=dh_stat,
+            auto_speed_stat=skill_speed,
+            dot_speed_stat=skill_speed,
+            weapon_damage=weapon_damage,
+            delay=delay,
+            pet_attack_power=pet_attack_power,
+            pet_job_attribute=pet_job_attribute,
+            pet_trait=pet_trait,
+            pet_atk_mod=pet_atk_mod,
             level=level,
         )
 
@@ -583,8 +563,8 @@ class Tank(BaseStats):
         self.add_role("Tank")
         self.atk_mod = 156
 
-        self.skill_speed = skill_speed
-        self.spell_speed = spell_speed
+        self.dot_speed_stat = skill_speed
+        self.auto_speed_stat = skill_speed
         pass
 
 
