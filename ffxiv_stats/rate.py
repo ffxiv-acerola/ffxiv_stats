@@ -150,30 +150,11 @@ class Rate:
 
         dh_buff = 1 + ((buffed_dh_rate - unbuffed_dh_rate) * 0.25)
         # Add DH rate to determination stat for new effective det multiplier
-        dh_buff *= (
-            (
-                (
-                    (
-                        (
-                            140
-                            * (
-                                determination
-                                - self.lvl_main
-                                + self.dh_amt
-                                - self.lvl_sub
-                            )
-                        )
-                        / self.lvl_div
-                    )
-                    + 1000
-                )
-                // 1
-            )
-            / 1000
-        )
-        # Divide out the original determination multiplier so it can be treated as a buff
+        det_and_dh_amt = (determination - self.lvl_main) + (self.dh_amt - self.lvl_sub)
+        dh_buff *= np.floor(((140 * (det_and_dh_amt)) / self.lvl_div) + 1000) / 1000
+        # Divide out the original determination multiplier so it isn't double counted.
         dh_buff /= (
-            (((140 * (determination - self.lvl_main)) / self.lvl_div) + 1000) // 1
+            np.floor(((140 * (determination - self.lvl_main)) / self.lvl_div) + 1000)
         ) / 1000
 
         dh_buff = round(dh_buff, 6)
