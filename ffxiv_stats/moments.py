@@ -200,6 +200,10 @@ class ActionMoments(Support):
         self.mean /= self.t
         self.variance /= self.t**2
 
+        self.damage_support, self.damage_distribution = self.compute_dps_distribution()
+        self.dps_support = self.damage_support / self.t
+        self.dps_distribution = self.damage_distribution / np.trapz(self.damage_distribution, self.dps_support)
+
         pass
 
     def hit_type_combos(self, n):
@@ -418,6 +422,169 @@ class ActionMoments(Support):
             self._third_moment - 3 * self.mean * self.variance - self.mean**3
         ) / self.variance ** (3.0 / 2.0)
 
+    def compute_dps_distribution(self):
+        """
+        Convolve the single-hit PMF of a action n_hit times to get the exact PMF of an action landing n_hits.
+
+        returns:
+        dmg_support - np array of the damage support
+        conv_pmf - damage distribution for action landing n hits
+        """
+
+        def convolve_by_partitions(one_hit_pmf, n):
+            """
+            Self-convolve a 1-hit damage distribution to yield an n-hit damage distribution.
+            This is efficiently performed by splitting n into partitions and convolving the 1-hit damage
+            distribution by these partitions, significantly reducing the number of convolutions which
+            needs to be performed.
+
+            inputs:
+            one_hit_pmf - np array of the damage distribution for one hit
+            n - number of hits
+
+            returns damage distribution for action landing n hits
+            """
+
+            def partition_n(n):
+                """
+                Iteratively split integer n into partitions by dividing by 2 until 1 is reached.
+                """
+                if n % 2 == 0:
+                    a = n // 2
+                    b = n // 2
+
+                else:
+                    a = (n + 1) // 2
+                    b = (n - 1) // 2
+
+                return a, b
+
+            # The list of partitions are first computed by dividing by 2
+            # (and adding or subtracting 1 for negative numbers)
+
+            # Example: 13 -> {1, 2, 3, 6, 7, 13}
+            # From the comment in https://math.stackexchange.com/questions/2114575/partitions-of-n-that-generate-all-numbers-smaller-than-n
+            # I once studied this problem and found a constructive partition method. Here is the brief. We are given a positive integer n.
+            # STEP ONE: if n is an even number, partition it into A=n2 and B=n2; otherwise, partition it into A=n+12 and B=n−12.
+            # STEP TWO: re-partition B into A1 and B1.
+            # STEP THREE: re-partition B1......Until we get 1.
+            # I didn't prove this method always works but I believe it is valid
+            a, b = partition_n(n)
+            partition_set = set((a, b))
+            while b > 1:
+                a, b = partition_n(b)
+                partition_set.update((a, b))
+
+            # Happens if n = 1, just remove 0
+            if 0 in partition_set:
+                partition_set = partition_set.difference({0})
+
+            # Also add n to the set for easy looping
+            partition_set.update([n])
+            partition_set = sorted(list(partition_set))
+
+            # Now convolve according to the partition set
+            # Keep track of results in a dictionary
+            convolve_dict = {1: one_hit_pmf}
+
+            # How to sum up the partitions to yield n sounds complicated, but there's only 3 cases
+            for a in range(len(partition_set) - 1):
+                # Self-add: e.g., 1 + 1 = 2
+                if partition_set[a] + partition_set[a] == partition_set[a + 1]:
+                    convolve_dict[partition_set[a + 1]] = fftconvolve(
+                        convolve_dict[partition_set[a]], convolve_dict[partition_set[a]]
+                    )
+
+                # Add to previous partition: e.g., 7 + 6 = 13
+                elif (a > 0) & (
+                    partition_set[a - 1] + partition_set[a] == partition_set[a + 1]
+                ):
+                    convolve_dict[partition_set[a + 1]] = fftconvolve(
+                        convolve_dict[partition_set[a - 1]],
+                        convolve_dict[partition_set[a]],
+                    )
+
+                # Add one: e.g., 6 + 1 = 7
+                elif (a > 0) & (
+                    partition_set[a] + partition_set[0] == partition_set[a + 1]
+                ):
+                    convolve_dict[partition_set[a + 1]] = fftconvolve(
+                        convolve_dict[partition_set[0]], convolve_dict[partition_set[a]]
+                    )
+
+            return convolve_dict[n]
+
+        # Define the bounds of the mixture distribution (lowest roll NH and highest roll CDH)
+        # Everything is integers, so the bounds can be defined with an arange
+        min_roll = np.floor(self.normal_supp[0]).astype(int)
+        max_roll = np.floor(self.crit_dir_supp[-1]).astype(int)
+
+        one_hit_pmf = np.zeros(max_roll - min_roll + 1)
+
+        # Need to find out how many indices away the start of each hit-type subdistribution is from
+        # the lower bound of the mixture distribution.
+        ch_offset = int(self.crit_supp[0] - self.normal_supp[0])
+        dh_offset = int(self.dir_supp[0] - self.normal_supp[0])
+        cdh_offset = int(self.crit_dir_supp[0] - self.normal_supp[0])
+
+        # Set up slices to include gaps
+        normal_slice = (
+            self.normal_supp - self.normal_supp[0]
+        ).astype(int)
+        ch_slice = (
+            self.crit_supp - self.crit_supp[0] + ch_offset
+        ).astype(int)
+        dh_slice = (
+            self.dir_supp - self.dir_supp[0] + dh_offset
+        ).astype(int)
+        cdh_slice = (
+            self.crit_dir_supp - self.crit_dir_supp[0] + cdh_offset
+        ).astype(int)
+
+        # Mixture distribution defined with multinomial weights
+        one_hit_pmf[normal_slice] = self.p[0] / self.normal_supp.size
+        one_hit_pmf[ch_slice] = self.p[1] / self.crit_supp.size
+        one_hit_pmf[dh_slice] = self.p[2] / self.dir_supp.size
+        one_hit_pmf[cdh_slice] = self.p[3] / self.crit_dir_supp.size
+
+
+        # The support needs to be able to account for trimming out
+        # normal hits when there are guaranteed hit types.
+        # Possible hit types are encoded as 1 (possible) and 0 (impossible)
+        possible_hit_types = np.array([1, 1, 1, 1])
+        possible_hit_types[self.p == 0] = 0
+
+        # Lowest for each hit type
+        lowest_roll = np.array(
+            [
+                self.normal_supp[0],
+                self.crit_supp[0],
+                self.dir_supp[0],
+                self.crit_dir_supp[0],
+            ]
+        )
+        # Lowest roll for only possible hit types
+        lowest_roll = (possible_hit_types * lowest_roll)[
+            (possible_hit_types * lowest_roll) > 0
+        ].min() * self.n
+
+        highest_roll = self.crit_dir_supp[-1] * self.n
+
+        # Damage support 
+        dmg_supp = np.arange(lowest_roll, highest_roll + 1, step=1).astype(
+            float
+        )
+
+        # If there are guaranteed hits, normal hits are impossible
+        # and the one-hit pmf has a lot of zeros to the array.
+        # This makes the convolution unnecessarily expensive.
+        # These 0 values can be trimmed out
+        one_hit_pmf = np.trim_zeros(one_hit_pmf)
+        conv_pmf = convolve_by_partitions(one_hit_pmf, self.n)
+        # convert to DPS, renormalize
+        # conv_pmf /= np.trapz(conv_pmf, dmg_supp)
+
+        return dmg_supp, conv_pmf
 
 class Rotation:
     def __init__(self, rotation_df, t, convolve_all=False, delta: int = 250) -> None:
@@ -517,15 +684,10 @@ class Rotation:
         # A future update might work on dynamically setting this value, or allow for different spacings,
         # which are unified at the very end.
 
-        # section (i), individual actions
-        self.action_dps_support = [None] * self.action_means.size
-        self.action_dps_distributions = [None] * self.action_means.size
+        # section (i), individual actions, just unpack from the action moments
+        self.action_dps_support = [x.damage_support for x in self.action_moments]
+        self.action_dps_distributions = [x.damage_distribution for x in self.action_moments]
         self.rotation_dps_distribution = None
-        for a in range(self.action_means.size):
-            (
-                self.action_dps_support[a],
-                self.action_dps_distributions[a],
-            ) = self.convolve_pmf(a)
 
         # Section (ii) base actions
         # Neat little function which says which base_action each index belongs to
@@ -676,153 +838,6 @@ class Rotation:
         squigma = mean - omega * delta * np.sqrt(2 / np.pi)
 
         return alpha, omega, squigma
-
-    def convolve_pmf(self, action_idx):
-        """
-        Convolve the single-hit PMF of a action n_hit times to get the exact PMF of an action landing n_hits.
-
-        Inputs:
-        action_idx - index of an action to compute the damage distribution for
-
-        returns:
-        dmg_support - np array of the damage support
-        conv_pmf - damage distribution for action landing n hits
-        """
-
-        def convolve_by_partitions(one_hit_pmf, n):
-            """
-            Self-convolve a 1-hit damage distribution to yield an n-hit damage distribution.
-            This is efficiently performed by splitting n into partitions and convolving the 1-hit damage
-            distribution by these partitions, significantly reducing the number of convolutions which
-            needs to be performed.
-
-            inputs:
-            one_hit_pmf - np array of the damage distribution for one hit
-            n - number of hits
-
-            returns damage distribution for action landing n hits
-            """
-
-            def partition_n(n):
-                """
-                Iteratively split integer n into partitions by dividing by 2 until 1 is reached.
-                """
-                if n % 2 == 0:
-                    a = n // 2
-                    b = n // 2
-
-                else:
-                    a = (n + 1) // 2
-                    b = (n - 1) // 2
-
-                return a, b
-
-            # The list of partitions are first computed by dividing by 2
-            # (and adding or subtracting 1 for negative numbers)
-
-            # Example: 13 -> {1, 2, 3, 6, 7, 13}
-            # From the comment in https://math.stackexchange.com/questions/2114575/partitions-of-n-that-generate-all-numbers-smaller-than-n
-            # I once studied this problem and found a constructive partition method. Here is the brief. We are given a positive integer n.
-            # STEP ONE: if n is an even number, partition it into A=n2 and B=n2; otherwise, partition it into A=n+12 and B=n−12.
-            # STEP TWO: re-partition B into A1 and B1.
-            # STEP THREE: re-partition B1......Until we get 1.
-            # I didn't prove this method always works but I believe it is valid
-            a, b = partition_n(n)
-            partition_set = set((a, b))
-            while b > 1:
-                a, b = partition_n(b)
-                partition_set.update((a, b))
-
-            # Happens if n = 1, just remove 0
-            if 0 in partition_set:
-                partition_set = partition_set.difference({0})
-
-            # Also add n to the set for easy looping
-            partition_set.update([n])
-            partition_set = sorted(list(partition_set))
-
-            # Now convolve according to the partition set
-            # Keep track of results in a dictionary
-            convolve_dict = {1: one_hit_pmf}
-
-            # How to sum up the partitions to yield n sounds complicated, but there's only 3 cases
-            for a in range(len(partition_set) - 1):
-                # Self-add: e.g., 1 + 1 = 2
-                if partition_set[a] + partition_set[a] == partition_set[a + 1]:
-                    # print(f"a = {partition_set[a]}: self add {partition_set[a]} + {partition_set[a]}")
-                    convolve_dict[partition_set[a + 1]] = fftconvolve(
-                        convolve_dict[partition_set[a]], convolve_dict[partition_set[a]]
-                    )
-
-                # Add to previous partition: e.g., 7 + 6 = 13
-                elif (a > 0) & (
-                    partition_set[a - 1] + partition_set[a] == partition_set[a + 1]
-                ):
-                    # print(f"a = {partition_set[a]}: prev add {partition_set[a-1]} + {partition_set[a]}")
-                    convolve_dict[partition_set[a + 1]] = fftconvolve(
-                        convolve_dict[partition_set[a - 1]],
-                        convolve_dict[partition_set[a]],
-                    )
-
-                # Add one: e.g., 6 + 1 = 7
-                elif (a > 0) & (
-                    partition_set[a] + partition_set[0] == partition_set[a + 1]
-                ):
-                    # print(f"a = {partition_set[a]}: 1 add {partition_set[0]} + {partition_set[a]}")
-                    convolve_dict[partition_set[a + 1]] = fftconvolve(
-                        convolve_dict[partition_set[0]], convolve_dict[partition_set[a]]
-                    )
-
-            return convolve_dict[n]
-
-        # make a shorter variable name cause this long
-        action_moment = self.action_moments[action_idx]
-
-        # Define the bounds of the mixture distribution (lowest roll NH and highest roll CDH)
-        # Everything is integers, so the bounds can be defined with an arange
-        min_roll = np.floor(action_moment.normal_supp[0]).astype(int)
-        max_roll = np.floor(action_moment.crit_dir_supp[-1]).astype(int)
-
-        self.one_hit_pmf = np.zeros(max_roll - min_roll + 1)
-
-        # Need to find out how many indices away the start of each hit-type subdistribution is from
-        # the lower bound of the mixture distribution.
-        ch_offset = int(action_moment.crit_supp[0] - action_moment.normal_supp[0])
-        dh_offset = int(action_moment.dir_supp[0] - action_moment.normal_supp[0])
-        cdh_offset = int(action_moment.crit_dir_supp[0] - action_moment.normal_supp[0])
-
-        # Set up slices to include gaps
-        normal_slice = (
-            action_moment.normal_supp - action_moment.normal_supp[0]
-        ).astype(int)
-        ch_slice = (
-            action_moment.crit_supp - action_moment.crit_supp[0] + ch_offset
-        ).astype(int)
-        dh_slice = (
-            action_moment.dir_supp - action_moment.dir_supp[0] + dh_offset
-        ).astype(int)
-        cdh_slice = (
-            action_moment.crit_dir_supp - action_moment.crit_dir_supp[0] + cdh_offset
-        ).astype(int)
-
-        # Mixture distribution defined with multinomial weights
-        self.one_hit_pmf[normal_slice] = (
-            action_moment.p[0] / action_moment.normal_supp.size
-        )
-        self.one_hit_pmf[ch_slice] = action_moment.p[1] / action_moment.crit_supp.size
-        self.one_hit_pmf[dh_slice] = action_moment.p[2] / action_moment.dir_supp.size
-        self.one_hit_pmf[cdh_slice] = (
-            action_moment.p[3] / action_moment.crit_dir_supp.size
-        )
-
-        conv_pmf = convolve_by_partitions(self.one_hit_pmf, action_moment.n)
-        lowest_roll = int(np.floor(action_moment.normal_supp[0]) * action_moment.n)
-
-        dmg_supp = np.arange(lowest_roll, conv_pmf.size + lowest_roll, step=1).astype(
-            float
-        )
-
-        return dmg_supp, conv_pmf
 
     def plot_action_distributions(self, ax=None, **kwargs):
         """
