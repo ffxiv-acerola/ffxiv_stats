@@ -659,7 +659,7 @@ class Rotation:
         rotation_df,
         t,
         convolve_all=False,
-        rotation_delta: int = 250,
+        rotation_delta: int = 100,
         action_delta: int = 10,
     ) -> None:
         """
