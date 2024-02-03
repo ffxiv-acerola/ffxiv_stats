@@ -2,6 +2,8 @@ import numpy as np
 from numpy import floor as nf
 import pandas as pd
 
+from warnings import warn
+
 from .moments import Rotation
 from .modifiers import level_mod
 
@@ -264,12 +266,12 @@ class BaseStats(Rotation):
                 else:
                     ap_adjust = row["main_stat_add"]
 
-                d2.append(self.auto_attack_d2(row["potency"]), ap_adjust=ap_adjust)
+                d2.append(self.auto_attack_d2(row["potency"], ap_adjust=ap_adjust))
                 is_dot.append(0)
 
             elif row["damage_type"] == "pet":
                 d2.append(self.pet_direct_d2(row["potency"], ap_adjust=row["main_stat_add"]))
-
+                is_dot.append(0)
             else:
                 raise ValueError(
                     f"Invalid damage type value of '{row['damage_type']}'. Allow values are ('direct', 'magic-dot', 'physical-dot', 'auto')"
@@ -422,7 +424,6 @@ class Healer(BaseStats):
         mind,
         strength,
         det,
-        skill_speed,
         spell_speed,
         crit_stat,
         dh_stat,
@@ -433,6 +434,10 @@ class Healer(BaseStats):
         pet_trait=None,
         pet_atk_mod=195,
         level=90,
+        intelligence=None,
+        dexterity=None,
+        vit=None,
+        tenacity=None
     ) -> None:
         """
         Set healer-specific stats with this class like main stat, traits, etc.
@@ -466,7 +471,7 @@ class Healer(BaseStats):
             crit_stat=crit_stat,
             dh_stat=dh_stat,
             dot_speed_stat=spell_speed,
-            auto_speed_stat=skill_speed,
+            auto_speed_stat=400,
             weapon_damage=weapon_damage,
             delay=delay,
             pet_attack_power=pet_attack_power,
@@ -481,8 +486,11 @@ class Healer(BaseStats):
         self.job_attribute = 115
 
         self.dot_speed_stat = spell_speed
-        self.auto_speed_stat = skill_speed
+        self.auto_speed_stat = 400
         self.add_role("Healer")
+
+        if (dexterity is not None) or (intelligence is not None) or (vit is not None) or (tenacity is not None):
+            warn("Irrelevant main stats (DEX, INT, VIT), and tenacity are no longer required and in a future update will give an error.")
         pass
 
 
