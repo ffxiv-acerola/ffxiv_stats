@@ -207,7 +207,7 @@ class BaseStats(Rotation):
             + 100
         )
 
-    def attach_rotation(self, rotation_df, t, convolve_all=False, delta=250):
+    def attach_rotation(self, rotation_df, t, action_delta=10, rotation_delta=100):
         """
         Attach a rotation data frame and compute the corresponding DPS distribution.
 
@@ -280,7 +280,7 @@ class BaseStats(Rotation):
         rotation_df["d2"] = d2
         rotation_df["is_dot"] = is_dot
 
-        super().__init__(rotation_df, t, convolve_all, delta)
+        super().__init__(rotation_df, t, action_delta=action_delta, rotation_delta=rotation_delta)
         pass
 
     def auto_attack_d2(self, potency, ap_adjust=0, stat_override=None):

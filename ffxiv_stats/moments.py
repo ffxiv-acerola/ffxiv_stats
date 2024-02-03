@@ -5,6 +5,29 @@ from scipy.signal import fftconvolve
 import matplotlib.pyplot as plt
 
 
+def _coarsened_boundaries(start, end, delta):
+    """
+    Get the closest start and end points when coarsening a damage support.
+
+    start - uncoarsened starting point
+    end - uncoarsened ending point
+    delta - step size
+    """
+    rem = start % delta
+    if rem > delta // 2:
+        coarsened_start = start - rem + delta
+    else:
+        coarsened_start = start - rem
+
+    rem = end % delta
+    if rem > delta // 2:
+        coarsened_end = end - rem + delta
+    else:
+        coarsened_end = end - rem
+
+    return coarsened_start, coarsened_end
+
+
 class Support:
     def __init__(self, d2, l_c, is_dot, buffs=None, l_d=None) -> None:
         """
@@ -123,7 +146,7 @@ class Support:
 
 
 class ActionMoments(Support):
-    def __init__(self, action_df, t) -> None:
+    def __init__(self, action_df, t, action_delta=10) -> None:
         """
         Compute moments for a action landing n_hits
 
@@ -136,6 +159,11 @@ class ActionMoments(Support):
                               Value should be in the thousands (1250 -> 125% crit buff).
                     buffs: list of buffs present. A 10% buff should be represented as [1.10], no buff as [1].
                     is_dot: boolean or 0/1, whether the action is a damage over time effect.
+        t - elapsed time, for converting damage to DPS
+        action_delta - amount to discretize damage by. Instead of representing damage in steps of 1, 100, 101, 102, ..., 200,
+                       damage is represented in steps of `action_delta`, 100, 110, 120, ..., 200.
+                       Generally a value of 10 gives a good balance of speed and accuracy.
+                       Larger values result in a faster calculation, but less accurate damage distributions.
         """
 
         column_check = set(["n", "p", "d2", "l_c", "buffs", "is_dot"])
@@ -200,9 +228,12 @@ class ActionMoments(Support):
         self.mean /= self.t
         self.variance /= self.t**2
 
+        self.action_delta = action_delta
         self.damage_support, self.damage_distribution = self.compute_dps_distribution()
         self.dps_support = self.damage_support / self.t
-        self.dps_distribution = self.damage_distribution / np.trapz(self.damage_distribution, self.dps_support)
+        self.dps_distribution = self.damage_distribution / np.trapz(
+            self.damage_distribution, self.dps_support
+        )
 
         pass
 
@@ -528,25 +559,18 @@ class ActionMoments(Support):
         cdh_offset = int(self.crit_dir_supp[0] - self.normal_supp[0])
 
         # Set up slices to include gaps
-        normal_slice = (
-            self.normal_supp - self.normal_supp[0]
-        ).astype(int)
-        ch_slice = (
-            self.crit_supp - self.crit_supp[0] + ch_offset
-        ).astype(int)
-        dh_slice = (
-            self.dir_supp - self.dir_supp[0] + dh_offset
-        ).astype(int)
-        cdh_slice = (
-            self.crit_dir_supp - self.crit_dir_supp[0] + cdh_offset
-        ).astype(int)
+        normal_slice = (self.normal_supp - self.normal_supp[0]).astype(int)
+        ch_slice = (self.crit_supp - self.crit_supp[0] + ch_offset).astype(int)
+        dh_slice = (self.dir_supp - self.dir_supp[0] + dh_offset).astype(int)
+        cdh_slice = (self.crit_dir_supp - self.crit_dir_supp[0] + cdh_offset).astype(
+            int
+        )
 
         # Mixture distribution defined with multinomial weights
         one_hit_pmf[normal_slice] = self.p[0] / self.normal_supp.size
         one_hit_pmf[ch_slice] = self.p[1] / self.crit_supp.size
         one_hit_pmf[dh_slice] = self.p[2] / self.dir_supp.size
         one_hit_pmf[cdh_slice] = self.p[3] / self.crit_dir_supp.size
-
 
         # The support needs to be able to account for trimming out
         # normal hits when there are guaranteed hit types.
@@ -570,24 +594,49 @@ class ActionMoments(Support):
 
         highest_roll = self.crit_dir_supp[-1] * self.n
 
-        # Damage support 
-        dmg_supp = np.arange(lowest_roll, highest_roll + 1, step=1).astype(
-            float
+        # 1-hit damage support
+        one_hit_support = np.arange(
+            lowest_roll // self.n, highest_roll // self.n + 1, step=1
         )
+
+        # Coarsened 1-hit support
+        coarsened_start, coarsened_end = _coarsened_boundaries(
+            lowest_roll // self.n, highest_roll // self.n, self.action_delta
+        )
+        coarsened_one_hit_support = np.arange(
+            coarsened_start, coarsened_end + self.action_delta, step=self.action_delta
+        )
+        # Coarsened with spacing of self.action_delta
+        coarsened_n_hit_support = np.arange(
+            coarsened_start * self.n,
+            coarsened_end * self.n + self.action_delta,
+            step=self.action_delta,
+        ).astype(float)
 
         # If there are guaranteed hits, normal hits are impossible
         # and the one-hit pmf has a lot of zeros to the array.
         # This makes the convolution unnecessarily expensive.
         # These 0 values can be trimmed out
         one_hit_pmf = np.trim_zeros(one_hit_pmf)
-        conv_pmf = convolve_by_partitions(one_hit_pmf, self.n)
-        # convert to DPS, renormalize
-        # conv_pmf /= np.trapz(conv_pmf, dmg_supp)
+        # Coarsen onto support with spacing `self.action_delta`
+        coarsened_one_hit_pmf = np.interp(
+            coarsened_one_hit_support, one_hit_support, one_hit_pmf
+        )
 
-        return dmg_supp, conv_pmf
+        conv_pmf = convolve_by_partitions(coarsened_one_hit_pmf, self.n)
+
+        return coarsened_n_hit_support, conv_pmf
+
 
 class Rotation:
-    def __init__(self, rotation_df, t, convolve_all=False, delta: int = 250) -> None:
+    def __init__(
+        self,
+        rotation_df,
+        t,
+        convolve_all=False,
+        rotation_delta: int = 250,
+        action_delta: int = 10,
+    ) -> None:
         """
         Get damage variability for a rotation.
 
@@ -623,10 +672,12 @@ class Rotation:
         # Damage is discretized by this much.
         # Bigger number = faster but larger discretization error
         # Smaller number = slower but more accurate.
-        self.delta = delta
+        self.rotation_delta = rotation_delta
+        self.action_delta = action_delta
 
         self.action_moments = [
-            ActionMoments(row, t) for _, row in rotation_df.iterrows()
+            ActionMoments(row, t, action_delta=action_delta)
+            for _, row in rotation_df.iterrows()
         ]
         self.action_names = rotation_df["action_name"].tolist()
         self.action_means = np.array([x.mean for x in self.action_moments])
@@ -650,10 +701,9 @@ class Rotation:
         """
         Compute and set the support and PMF of DPS distributions.
 
-        This method is broken into 3 sections
-        (i) Individual actions (remember Action A with Buff 1 is distinct from Action A with Buff 2).
-        (ii) Unique actions (Action A with Buff 1 and Action A with Buff 2 are group together now).
-        (iii) The entire rotation.
+        This method is broken into 2 sections
+        (i) Unique actions (Action A with Buff 1 and Action A with Buff 2 are group together now).
+        (ii) The entire rotation.
         """
         # Specifics on convolving everything together because there are quite a few nuances to
         # do things efficiently while still being correct.
@@ -684,9 +734,11 @@ class Rotation:
         # A future update might work on dynamically setting this value, or allow for different spacings,
         # which are unified at the very end.
 
-        # section (i), individual actions, just unpack from the action moments
+        # section (0), individual actions, just unpack from the action moments
         self.action_dps_support = [x.damage_support for x in self.action_moments]
-        self.action_dps_distributions = [x.damage_distribution for x in self.action_moments]
+        self.action_dps_distributions = [
+            x.damage_distribution for x in self.action_moments
+        ]
         self.rotation_dps_distribution = None
 
         # Section (ii) base actions
@@ -730,18 +782,34 @@ class Rotation:
                         action_dps_distribution,
                         self.action_dps_distributions[action_idx_list[idx + 1]],
                     )
+                # For some reason these numbers get super tiny fast
+                # and can lead to underflow, so periodically make them on the order of 1
+                # if they get too small. Normalization is irrelevant since these get normalized
+                # later
+                if action_dps_distribution.max() < 1e-75:
+                    action_dps_distribution /= action_dps_distribution.max()
 
             # Coarsen support in prep for rotation distribution
-            uncoarsened_supported = np.arange(
-                action_low_high[:, 0].sum(), action_low_high[:, 1].sum() + 1, step=1
-            )
-            coarsened_support = np.arange(
+            uncoarsened_support = np.arange(
                 action_low_high[:, 0].sum(),
-                action_low_high[:, 1].sum() + self.delta,
-                step=self.delta,
+                action_low_high[:, 1].sum() + self.action_delta,
+                step=self.action_delta,
             )
+
+            coarsened_start, coarsened_end = _coarsened_boundaries(
+                action_low_high[:, 0].sum(),
+                action_low_high[:, 1].sum(),
+                self.rotation_delta,
+            )
+
+            coarsened_support = np.arange(
+                coarsened_start,
+                coarsened_end + self.rotation_delta,
+                step=self.rotation_delta,
+            )
+
             action_dps_distribution = np.interp(
-                coarsened_support, uncoarsened_supported, action_dps_distribution
+                coarsened_support, uncoarsened_support, action_dps_distribution
             )
 
             self.unique_actions_distribution[name] = {
@@ -785,9 +853,17 @@ class Rotation:
                 )
 
         # Create support and convert to DPS
+        # Boundaries for coarsened distribution
+        coarsened_rotation_start, coarsened_rotation_end = _coarsened_boundaries(
+            rotation_lower_bound,
+            rotation_upper_bound,
+            self.rotation_delta,
+        )
         self.rotation_dps_support = (
             np.arange(
-                rotation_lower_bound, rotation_upper_bound + self.delta, step=self.delta
+                coarsened_rotation_start,
+                coarsened_rotation_end + self.rotation_delta,
+                step=self.rotation_delta,
             ).astype(float)
             / self.t
         )
