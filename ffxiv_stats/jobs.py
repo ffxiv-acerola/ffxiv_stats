@@ -219,12 +219,25 @@ class BaseStats(Rotation):
                                         Used for grouping actions together.
                       potency: int, potency of the action
                       n: int, number of hits for the action.
-                      p: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH]
+                      p_n: probability of a normal hit.
+                      p_c: probability of a critical hit.
+                      p_d: probability of a direct hit.
+                      p_cd: probability of a critical-direct hit.
                       l_c: int, damage multiplier for a critical hit.
                                 Value should be in the thousands (1250 -> 125% crit buff).
-                      buffs: list of buffs present. A 10% buff should is represented as [1.10]. No buffs can be represented at [1] or None.
+                      buffs: Total buff strength, or a list of buffs. A 10% buff should be represented as 1.1.
+                             A 5% and 10% buff can be represented as either 1.155 or [1.05, 1.10], but the former is preferred.
+                             Saving a dataframe with array columns can be finnicky.
                       damage_type: str saying the type of damage, {'direct', 'magic-dot', 'physical-dot', 'auto'}
                       main_stat_add: int, how much to add to the main stat (used to account for medication, if present) when computing d2
+        t - time elapsed for computing DPS from damage.
+        action_delta - amount to discretize damage of actions by. 
+                       Instead of representing damage in steps of 1, 100, 101, 102, ..., 200,
+                       damage is represented in steps of `action_delta`, 100, 110, 120, ..., 200.
+                       Generally a value of 10 gives a good balance of speed and accuracy.
+                       Larger values result in a faster calculation, but less accurate damage distributions.
+        rotation_delta - Amount to discretize damage of unique actions by, for computing the rotation damage distribution.
+                         Same rationale for actions, but just after all unique actions are grouped together.
         """
         column_check = set(["potency", "damage_type"])
         missing_columns = column_check - set(rotation_df.columns)

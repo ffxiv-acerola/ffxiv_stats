@@ -56,10 +56,17 @@ class Support:
         pass
 
     def buff_check(self, buffs):
-        if buffs is None or len(buffs) == 0:
+        if buffs is None:
             return 1
+
+        if isinstance(buffs, list) or isinstance(buffs, np.ndarray):
+            if len(buffs) == 0:
+                return 1
+            else:
+                return np.product(buffs)
+
         else:
-            return np.product(buffs)
+            return buffs
 
     def ch_dmg_modifier(self):
         """
@@ -153,11 +160,16 @@ class ActionMoments(Support):
         inputs:
         action_df - pandas dataframe with the columns:
                     n: int, number of hits.
-                    p: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH].
+                    p_n: probability of a normal hit.
+                    p_c: probability of a critical hit.
+                    p_d: probability of a direct hit.
+                    p_cd: probability of a critical-direct hit.
                     d2: int, base damage value of action before any variability.
                     l_c: int, damage multiplier for a critical hit.
                               Value should be in the thousands (1250 -> 125% crit buff).
-                    buffs: list of buffs present. A 10% buff should be represented as [1.10], no buff as [1].
+                    buffs: Total buff strength, or a list of buffs. A 10% buff should be represented as 1.1.
+                           A 5% and 10% buff can be represented as either 1.155 or [1.05, 1.10], but the former is preferred.
+                           Saving a dataframe with array columns can be finnicky.
                     is_dot: boolean or 0/1, whether the action is a damage over time effect.
         t - elapsed time, for converting damage to DPS
         action_delta - amount to discretize damage by. Instead of representing damage in steps of 1, 100, 101, 102, ..., 200,
@@ -166,7 +178,7 @@ class ActionMoments(Support):
                        Larger values result in a faster calculation, but less accurate damage distributions.
         """
 
-        column_check = set(["n", "p", "d2", "l_c", "buffs", "is_dot"])
+        column_check = set(["n", "d2", "l_c", "buffs", "is_dot"])
         if isinstance(action_df, pd.core.series.Series):
             supplied_columns = action_df.index
         else:
@@ -177,8 +189,21 @@ class ActionMoments(Support):
                 f"The following column(s) are missing from `rotation_df`: {*missing_columns,}. Please refer to the docstring and add these field(s) or double check the spelling."
             )
 
+        if any([x in ["p_n", "p_c", "p_d", "p_cd"] for x in list(supplied_columns)]):
+            separated_p = True
+        # Backwards compatibility when this was passed in as a list
+        elif any([x in ["p"] for x in list(supplied_columns)]):
+            separated_p = False
+        else:
+            raise ValueError("No hit-type probability column detected. There should be four columns, p_n, p_c, p_d, and p_cd, for the probability of each hit type.")
+
         self.n = action_df["n"]
-        self.p = action_df["p"]
+
+        if not separated_p:
+            self.p = action_df["p"]
+        else:
+            self.p = [action_df["p_n"], action_df["p_c"], action_df["p_d"], action_df["p_cd"],]
+
         self.t = t
         if "action_name" in action_df:
             self.action_name = action_df["action_name"]
@@ -646,17 +671,29 @@ class Rotation:
                      base_action: str, name of an action ignoring buffs. For example, Glare III with chain stratagem
                                        and Glare III with mug will have different `action_names`, but the same base_action.
                                        Used for grouping actions together.
-                     n: int, number of hits.
-                     p: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH].
+                    p_n: probability of a normal hit.
+                    p_c: probability of a critical hit.
+                    p_d: probability of a direct hit.
+                    p_cd: probability of a critical-direct hit.
+                    d2: int, base damage value of action before any variability.
+                    l_c: int, damage multiplier for a critical hit.
+                              Value should be in the thousands (1250 -> 125% crit buff).
                      d2: int, base damage value of action before any variability.
                      l_c: int, damage multiplier for a critical hit.
                                Value should be in the thousands (1250 -> 125% crit buff).
-                     buffs: list of buffs present. A 10% buff should is represented as [1.10]. No buffs can be represented at [1] or None.
+                    buffs: Total buff strength, or a list of buffs. A 10% buff should be represented as 1.1.
+                           A 5% and 10% buff can be represented as either 1.155 or [1.05, 1.10], but the former is preferred.
+                           Saving a dataframe with array columns can be finnicky. 
                      is_dot: boolean or 0/1, whether the action is a damage over time effect.
         t: float, time elapsed in seconds. Set t=1 to get damage dealt instead of DPS.
         convolve_all: bool, whether to compute all DPS distributions by convolutions (normally actions with large n can be computed with a skew normal distribution).
-        delta: int, step size for damage grid used in convolving unique action distributions together. How large delta can be will depend on the the damage span
-                    of a unique action (all hits normal to all hits critical direct). Values between 100-1000 are generally sufficient.
+        action_delta - amount to discretize damage of actions by. 
+                       Instead of representing damage in steps of 1, 100, 101, 102, ..., 200,
+                       damage is represented in steps of `action_delta`, 100, 110, 120, ..., 200.
+                       Generally a value of 10 gives a good balance of speed and accuracy.
+                       Larger values result in a faster calculation, but less accurate damage distributions.
+        rotation_delta - Amount to discretize damage of unique actions by, for computing the rotation damage distribution.
+                         Same rationale for actions, but just after all unique actions are grouped together.
         """
         column_check = set(["base_action", "action_name"])
         missing_columns = column_check - set(rotation_df.columns)
