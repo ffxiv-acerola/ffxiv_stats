@@ -231,7 +231,7 @@ class BaseStats(Rotation):
                       damage_type: str saying the type of damage, {'direct', 'magic-dot', 'physical-dot', 'auto'}
                       main_stat_add: int, how much to add to the main stat (used to account for medication, if present) when computing d2
         t - time elapsed for computing DPS from damage.
-        action_delta - amount to discretize damage of actions by. 
+        action_delta - amount to discretize damage of actions by.
                        Instead of representing damage in steps of 1, 100, 101, 102, ..., 200,
                        damage is represented in steps of `action_delta`, 100, 110, 120, ..., 200.
                        Generally a value of 10 gives a good balance of speed and accuracy.
@@ -283,7 +283,9 @@ class BaseStats(Rotation):
                 is_dot.append(0)
 
             elif row["damage_type"] == "pet":
-                d2.append(self.pet_direct_d2(row["potency"], ap_adjust=row["main_stat_add"]))
+                d2.append(
+                    self.pet_direct_d2(row["potency"], ap_adjust=row["main_stat_add"])
+                )
                 is_dot.append(0)
             else:
                 raise ValueError(
@@ -293,7 +295,9 @@ class BaseStats(Rotation):
         rotation_df["d2"] = d2
         rotation_df["is_dot"] = is_dot
 
-        super().__init__(rotation_df, t, action_delta=action_delta, rotation_delta=rotation_delta)
+        super().__init__(
+            rotation_df, t, action_delta=action_delta, rotation_delta=rotation_delta
+        )
         pass
 
     def auto_attack_d2(self, potency, ap_adjust=0, stat_override=None):
@@ -450,7 +454,7 @@ class Healer(BaseStats):
         intelligence=None,
         dexterity=None,
         vit=None,
-        tenacity=None
+        tenacity=None,
     ) -> None:
         """
         Set healer-specific stats with this class like main stat, traits, etc.
@@ -502,8 +506,15 @@ class Healer(BaseStats):
         self.auto_speed_stat = 400
         self.add_role("Healer")
 
-        if (dexterity is not None) or (intelligence is not None) or (vit is not None) or (tenacity is not None):
-            warn("Irrelevant main stats (DEX, INT, VIT), and tenacity are no longer required and in a future update will give an error.")
+        if (
+            (dexterity is not None)
+            or (intelligence is not None)
+            or (vit is not None)
+            or (tenacity is not None)
+        ):
+            warn(
+                "Irrelevant main stats (DEX, INT, VIT), and tenacity are no longer required and in a future update will give an error."
+            )
         pass
 
 
@@ -547,7 +558,7 @@ class Tank(BaseStats):
               "Warrior", "Paladin", "DarkKnight", or "Gunbreaker".
         pet_job_attribute - optional, pet-based job attribute. For Living Shadow in EW, this is 100.
         pet_main_stat_adjust - amount to adjust attack power by. For Living Shadow, this is the difference between strength racial bonus
-                               between the player's race and a midlander (+3). 
+                               between the player's race and a midlander (+3).
         pet_trait - optional, pet-based trait bonus. For Living Shadow in EW, this is 100
         pet_atk_mod - optional, pet-based attack modifier. For Living Shadow in EW, this is 195
         level - Player level, default of 90, can be 70, 80, or 90.

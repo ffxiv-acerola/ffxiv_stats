@@ -195,14 +195,21 @@ class ActionMoments(Support):
         elif any([x in ["p"] for x in list(supplied_columns)]):
             separated_p = False
         else:
-            raise ValueError("No hit-type probability column detected. There should be four columns, p_n, p_c, p_d, and p_cd, for the probability of each hit type.")
+            raise ValueError(
+                "No hit-type probability column detected. There should be four columns, p_n, p_c, p_d, and p_cd, for the probability of each hit type."
+            )
 
         self.n = action_df["n"]
 
         if not separated_p:
             self.p = action_df["p"]
         else:
-            self.p = [action_df["p_n"], action_df["p_c"], action_df["p_d"], action_df["p_cd"],]
+            self.p = [
+                action_df["p_n"],
+                action_df["p_c"],
+                action_df["p_d"],
+                action_df["p_cd"],
+            ]
 
         self.t = t
         if "action_name" in action_df:
@@ -683,11 +690,11 @@ class Rotation:
                                Value should be in the thousands (1250 -> 125% crit buff).
                     buffs: Total buff strength, or a list of buffs. A 10% buff should be represented as 1.1.
                            A 5% and 10% buff can be represented as either 1.155 or [1.05, 1.10], but the former is preferred.
-                           Saving a dataframe with array columns can be finnicky. 
+                           Saving a dataframe with array columns can be finnicky.
                      is_dot: boolean or 0/1, whether the action is a damage over time effect.
         t: float, time elapsed in seconds. Set t=1 to get damage dealt instead of DPS.
         convolve_all: bool, whether to compute all DPS distributions by convolutions (normally actions with large n can be computed with a skew normal distribution).
-        action_delta - amount to discretize damage of actions by. 
+        action_delta - amount to discretize damage of actions by.
                        Instead of representing damage in steps of 1, 100, 101, 102, ..., 200,
                        damage is represented in steps of `action_delta`, 100, 110, 120, ..., 200.
                        Generally a value of 10 gives a good balance of speed and accuracy.
@@ -889,7 +896,9 @@ class Rotation:
                     self.rotation_dps_distribution,
                 )
                 if self.rotation_dps_distribution.max() < 1e-75:
-                    self.rotation_dps_distribution /= self.rotation_dps_distribution.max()
+                    self.rotation_dps_distribution /= (
+                        self.rotation_dps_distribution.max()
+                    )
 
         # Create support and convert to DPS
         # Boundaries for coarsened distribution
@@ -907,11 +916,13 @@ class Rotation:
             / self.t
         )
 
-        self.rotation_dps_support = np.arange(int(rotation_dps_support[1]), int(rotation_dps_support[-1]) + 0.5, step=0.5)
+        self.rotation_dps_support = np.arange(
+            int(rotation_dps_support[1]), int(rotation_dps_support[-1]) + 0.5, step=0.5
+        )
         self.rotation_dps_distribution = np.interp(
             self.rotation_dps_support,
             rotation_dps_support,
-            self.rotation_dps_distribution
+            self.rotation_dps_distribution,
         )
         # And renormalize the DPS distribution
         self.rotation_dps_distribution /= np.trapz(
