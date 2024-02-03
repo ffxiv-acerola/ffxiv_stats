@@ -888,6 +888,8 @@ class Rotation:
                     ],
                     self.rotation_dps_distribution,
                 )
+                if self.rotation_dps_distribution.max() < 1e-75:
+                    self.rotation_dps_distribution /= self.rotation_dps_distribution.max()
 
         # Create support and convert to DPS
         # Boundaries for coarsened distribution
@@ -896,13 +898,20 @@ class Rotation:
             rotation_upper_bound,
             self.rotation_delta,
         )
-        self.rotation_dps_support = (
+        rotation_dps_support = (
             np.arange(
                 coarsened_rotation_start,
                 coarsened_rotation_end + self.rotation_delta,
                 step=self.rotation_delta,
             ).astype(float)
             / self.t
+        )
+
+        self.rotation_dps_support = np.arange(int(rotation_dps_support[1]), int(rotation_dps_support[-1]) + 0.5, step=0.5)
+        self.rotation_dps_distribution = np.interp(
+            self.rotation_dps_support,
+            rotation_dps_support,
+            self.rotation_dps_distribution
         )
         # And renormalize the DPS distribution
         self.rotation_dps_distribution /= np.trapz(
