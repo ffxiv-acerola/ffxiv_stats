@@ -1,6 +1,5 @@
 import numpy as np
 from numpy import floor as nf
-import pandas as pd
 
 from warnings import warn
 

@@ -282,7 +282,8 @@ class ActionMoments(Support):
         Idk how it works because I copy/pasted from stackoverflow, but my God is it fast compared to nested loops
         https://stackoverflow.com/questions/34970848/find-all-combination-that-sum-to-n-with-multiple-lists
         """
-        import itertools, operator
+        import itertools
+        import operator
 
         hit_list = []
         for cuts in itertools.combinations_with_replacement(range(n + 1), 3):
