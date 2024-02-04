@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from scipy.stats import multinomial, skewnorm
+from scipy.stats import multinomial
 from scipy.signal import fftconvolve
 import matplotlib.pyplot as plt
 
