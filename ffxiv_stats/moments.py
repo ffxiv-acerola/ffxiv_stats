@@ -1,8 +1,31 @@
 import pandas as pd
 import numpy as np
-from scipy.stats import multinomial, skewnorm
+from scipy.stats import multinomial
 from scipy.signal import fftconvolve
 import matplotlib.pyplot as plt
+
+
+def _coarsened_boundaries(start, end, delta):
+    """
+    Get the closest start and end points when coarsening a damage support.
+
+    start - uncoarsened starting point
+    end - uncoarsened ending point
+    delta - step size
+    """
+    rem = start % delta
+    if rem > delta // 2:
+        coarsened_start = start - rem + delta
+    else:
+        coarsened_start = start - rem
+
+    rem = end % delta
+    if rem > delta // 2:
+        coarsened_end = end - rem + delta
+    else:
+        coarsened_end = end - rem
+
+    return coarsened_start, coarsened_end
 
 
 class Support:
@@ -33,10 +56,17 @@ class Support:
         pass
 
     def buff_check(self, buffs):
-        if buffs is None or len(buffs) == 0:
+        if buffs is None:
             return 1
+
+        if isinstance(buffs, list) or isinstance(buffs, np.ndarray):
+            if len(buffs) == 0:
+                return 1
+            else:
+                return np.product(buffs)
+
         else:
-            return np.product(buffs)
+            return buffs
 
     def ch_dmg_modifier(self):
         """
@@ -123,22 +153,32 @@ class Support:
 
 
 class ActionMoments(Support):
-    def __init__(self, action_df, t) -> None:
+    def __init__(self, action_df, t, action_delta=10) -> None:
         """
         Compute moments for a action landing n_hits
 
         inputs:
         action_df - pandas dataframe with the columns:
                     n: int, number of hits.
-                    p: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH].
+                    p_n: probability of a normal hit.
+                    p_c: probability of a critical hit.
+                    p_d: probability of a direct hit.
+                    p_cd: probability of a critical-direct hit.
                     d2: int, base damage value of action before any variability.
                     l_c: int, damage multiplier for a critical hit.
                               Value should be in the thousands (1250 -> 125% crit buff).
-                    buffs: list of buffs present. A 10% buff should be represented as [1.10], no buff as [1].
+                    buffs: Total buff strength, or a list of buffs. A 10% buff should be represented as 1.1.
+                           A 5% and 10% buff can be represented as either 1.155 or [1.05, 1.10], but the former is preferred.
+                           Saving a dataframe with array columns can be finnicky.
                     is_dot: boolean or 0/1, whether the action is a damage over time effect.
+        t - elapsed time, for converting damage to DPS
+        action_delta - amount to discretize damage by. Instead of representing damage in steps of 1, 100, 101, 102, ..., 200,
+                       damage is represented in steps of `action_delta`, 100, 110, 120, ..., 200.
+                       Generally a value of 10 gives a good balance of speed and accuracy.
+                       Larger values result in a faster calculation, but less accurate damage distributions.
         """
 
-        column_check = set(["n", "p", "d2", "l_c", "buffs", "is_dot"])
+        column_check = set(["n", "d2", "l_c", "buffs", "is_dot"])
         if isinstance(action_df, pd.core.series.Series):
             supplied_columns = action_df.index
         else:
@@ -149,8 +189,28 @@ class ActionMoments(Support):
                 f"The following column(s) are missing from `rotation_df`: {*missing_columns,}. Please refer to the docstring and add these field(s) or double check the spelling."
             )
 
+        if any([x in ["p_n", "p_c", "p_d", "p_cd"] for x in list(supplied_columns)]):
+            separated_p = True
+        # Backwards compatibility when this was passed in as a list
+        elif any([x in ["p"] for x in list(supplied_columns)]):
+            separated_p = False
+        else:
+            raise ValueError(
+                "No hit-type probability column detected. There should be four columns, p_n, p_c, p_d, and p_cd, for the probability of each hit type."
+            )
+
         self.n = action_df["n"]
-        self.p = action_df["p"]
+
+        if not separated_p:
+            self.p = action_df["p"]
+        else:
+            self.p = [
+                action_df["p_n"],
+                action_df["p_c"],
+                action_df["p_d"],
+                action_df["p_cd"],
+            ]
+
         self.t = t
         if "action_name" in action_df:
             self.action_name = action_df["action_name"]
@@ -199,6 +259,13 @@ class ActionMoments(Support):
         # Convert from total damage to DPS
         self.mean /= self.t
         self.variance /= self.t**2
+
+        self.action_delta = action_delta
+        self.damage_support, self.damage_distribution = self.compute_dps_distribution()
+        self.dps_support = self.damage_support / self.t
+        self.dps_distribution = self.damage_distribution / np.trapz(
+            self.damage_distribution, self.dps_support
+        )
 
         pass
 
@@ -418,271 +485,9 @@ class ActionMoments(Support):
             self._third_moment - 3 * self.mean * self.variance - self.mean**3
         ) / self.variance ** (3.0 / 2.0)
 
-
-class Rotation:
-    def __init__(self, rotation_df, t, convolve_all=False, delta: int = 250) -> None:
-        """
-        Get damage variability for a rotation.
-
-        Inputs:
-        rotation_df: rotation dataframe with the following columns and types:
-                     action_name: str, unique name of an action. Unique action depends on `buffs`, `p`, and `l_c` present.
-                     base_action: str, name of an action ignoring buffs. For example, Glare III with chain stratagem
-                                       and Glare III with mug will have different `action_names`, but the same base_action.
-                                       Used for grouping actions together.
-                     n: int, number of hits.
-                     p: list of probability lists, in order [p_NH, p_CH, p_DH, p_CDH].
-                     d2: int, base damage value of action before any variability.
-                     l_c: int, damage multiplier for a critical hit.
-                               Value should be in the thousands (1250 -> 125% crit buff).
-                     buffs: list of buffs present. A 10% buff should is represented as [1.10]. No buffs can be represented at [1] or None.
-                     is_dot: boolean or 0/1, whether the action is a damage over time effect.
-        t: float, time elapsed in seconds. Set t=1 to get damage dealt instead of DPS.
-        convolve_all: bool, whether to compute all DPS distributions by convolutions (normally actions with large n can be computed with a skew normal distribution).
-        delta: int, step size for damage grid used in convolving unique action distributions together. How large delta can be will depend on the the damage span
-                    of a unique action (all hits normal to all hits critical direct). Values between 100-1000 are generally sufficient.
-        """
-        column_check = set(["base_action", "action_name"])
-        missing_columns = column_check - set(rotation_df.columns)
-        if len(missing_columns) != 0:
-            raise ValueError(
-                f"The following column(s) are missing from `rotation_df`: {*missing_columns,}. Please refer to the docstring and add these field(s) or double check the spelling."
-            )
-
-        self.rotation_df = rotation_df
-        self.t = t
-        # Deprecated/currently unused
-        self.convolve_all = convolve_all
-        # Damage is discretized by this much.
-        # Bigger number = faster but larger discretization error
-        # Smaller number = slower but more accurate.
-        self.delta = delta
-
-        self.action_moments = [
-            ActionMoments(row, t) for _, row in rotation_df.iterrows()
-        ]
-        self.action_names = rotation_df["action_name"].tolist()
-        self.action_means = np.array([x.mean for x in self.action_moments])
-        self.action_variances = np.array([x.variance for x in self.action_moments])
-        self.action_std = np.sqrt(self.action_variances)
-        self.action_skewness = np.array([x.skewness for x in self.action_moments])
-
-        self.rotation_mean = np.sum(self.action_means)
-        self.rotation_variance = np.sum(self.action_variances)
-        self.rotation_std = np.sqrt(self.rotation_variance)
-        # Need just the numerator of Pearson's skewness, which is why we multiply by the action variances inside the sum
-        self.rotation_skewness = np.sum(
-            self.action_skewness * self.action_variances ** (3 / 2)
-        ) / np.sum(self.action_variances) ** (3 / 2)
-
-        self.compute_dps_distributions()
-
-        pass
-
-    def compute_dps_distributions(self) -> None:
-        """
-        Compute and set the support and PMF of DPS distributions.
-
-        This method is broken into 3 sections
-        (i) Individual actions (remember Action A with Buff 1 is distinct from Action A with Buff 2).
-        (ii) Unique actions (Action A with Buff 1 and Action A with Buff 2 are group together now).
-        (iii) The entire rotation.
-        """
-        # Specifics on convolving everything together because there are quite a few nuances to
-        # do things efficiently while still being correct.
-        # All damage distributions is convolved together using damage and not DPS.
-        # The supports of each distribution must be on the same grid for the convolution to correctly
-        # correspond to a sum of random variables. Converting to DPS usually ends up with floats, so
-        # dealing with integer values of damage is a much more convenient unit to work in.
-
-        # At first, we just keep everything in terms of damage, and the supports are just
-        # all integers from the lower to upper bound. However, this makes the convolutions very expensive.
-        # The computational cost is N log N, where N is the number of integers between the lower (all hits normal)
-        # and upper (all hits critical-direct) bound. This can get very large (N ~ 1e7-1e8) and become
-        # computationally expensive, even with N log N complexity. Instead of working in steps of 1 damage,
-        # we can work in higher steps of damage, like 100/1000/10000/etc, by interpolating the damage
-        # distributions to a coarser grid. This process is referred to as "coarsening".
-
-        # The major consideration for coarsening is when to coarsen and by how much.
-        # Coarsening leads to a greater reduction in computational efficiency when N becomes large.
-        # All action distributions are initially convolved in steps of 1 damage n_hit times.
-        # Unique action distributions are also convolved in steps of 1 damage, and then coarsened.
-
-        # The action with the smallest damage span will limit how much the support can be coarsened by.
-        # The auto-attacks of a WHM only span 10s of damage, but their Afflatus Misery action can span 10,000s.
-        # This is a somewhat unique case, which also makes the argument that auto-attacks can be ignored.
-        # By default, damage is discretized in steps of 250, which seemed to still give good accuracy.
-        # This also means that actions with very low damage spans are ignored, like healer auto attacks.
-        # This wont have a large impact on the rotation damage distribution.
-        # A future update might work on dynamically setting this value, or allow for different spacings,
-        # which are unified at the very end.
-
-        # section (i), individual actions
-        self.action_dps_support = [None] * self.action_means.size
-        self.action_dps_distributions = [None] * self.action_means.size
-        self.rotation_dps_distribution = None
-        for a in range(self.action_means.size):
-            (
-                self.action_dps_support[a],
-                self.action_dps_distributions[a],
-            ) = self.convolve_pmf(a)
-
-        # Section (ii) base actions
-        # Neat little function which says which base_action each index belongs to
-        idx, unique_action_names = pd.factorize(self.rotation_df["base_action"])
-        self.unique_actions = {}
-        self.unique_actions = {n: [] for n in unique_action_names}
-
-        for i, x in enumerate(idx):
-            self.unique_actions[unique_action_names[x]].append(i)
-
-        self.unique_actions_distribution = {}
-
-        # Now loop over unique action indices and convolve together
-        for _, (name, action_idx_list) in enumerate(self.unique_actions.items()):
-            action_low_high = np.zeros((len(self.unique_actions[name]), 2))
-
-            # Support is sum of all lowest possible value (min roll NH) to highest possible value (max roll CDH)
-            for idx, action_idx in enumerate(action_idx_list):
-                action_low_high[idx, :] = np.array(
-                    [
-                        self.action_dps_support[action_idx].min(),
-                        self.action_dps_support[action_idx].max(),
-                    ]
-                )
-
-            if len(action_idx_list) == 1:
-                action_dps_distribution = self.action_dps_distributions[
-                    action_idx_list[0]
-                ]
-
-            elif len(action_idx_list) > 1:
-                action_dps_distribution = fftconvolve(
-                    self.action_dps_distributions[action_idx_list[0]],
-                    self.action_dps_distributions[action_idx_list[1]],
-                )
-
-            if len(action_idx_list) > 2:
-                for idx in range(1, len(action_idx_list) - 1):
-                    action_dps_distribution = fftconvolve(
-                        action_dps_distribution,
-                        self.action_dps_distributions[action_idx_list[idx + 1]],
-                    )
-
-            # Coarsen support in prep for rotation distribution
-            uncoarsened_supported = np.arange(
-                action_low_high[:, 0].sum(), action_low_high[:, 1].sum() + 1, step=1
-            )
-            coarsened_support = np.arange(
-                action_low_high[:, 0].sum(),
-                action_low_high[:, 1].sum() + self.delta,
-                step=self.delta,
-            )
-            action_dps_distribution = np.interp(
-                coarsened_support, uncoarsened_supported, action_dps_distribution
-            )
-
-            self.unique_actions_distribution[name] = {
-                "support": coarsened_support,
-                "dps_distribution": action_dps_distribution,
-            }
-
-        # Section (iii) whole rotation
-        rotation_lower_bound = np.array(
-            [v["support"][0] for _, v in self.unique_actions_distribution.items()]
-        ).sum()
-        rotation_upper_bound = np.array(
-            [v["support"][-1] for _, v in self.unique_actions_distribution.items()]
-        ).sum()
-
-        # `self.rotation_dps_distribution` needs to first be defined by convolving the first two unique actions together
-        # then we can loop starting at the second index.
-        if len(self.action_moments) > 1:
-            self.rotation_dps_distribution = fftconvolve(
-                self.unique_actions_distribution[unique_action_names[0]][
-                    "dps_distribution"
-                ],
-                self.unique_actions_distribution[unique_action_names[1]][
-                    "dps_distribution"
-                ],
-            )
-        # Special case if theres only one action, just return the first element.
-        else:
-            self.rotation_dps_distribution = self.unique_actions_distribution[
-                unique_action_names[0]
-            ]["dps_distribution"]
-
-        # Now loop
-        if len(self.action_moments) > 2:
-            for a in range(2, len(unique_action_names)):
-                self.rotation_dps_distribution = fftconvolve(
-                    self.unique_actions_distribution[unique_action_names[a]][
-                        "dps_distribution"
-                    ],
-                    self.rotation_dps_distribution,
-                )
-
-        # Create support and convert to DPS
-        self.rotation_dps_support = (
-            np.arange(
-                rotation_lower_bound, rotation_upper_bound + self.delta, step=self.delta
-            ).astype(float)
-            / self.t
-        )
-        # And renormalize the DPS distribution
-        self.rotation_dps_distribution /= np.trapz(
-            self.rotation_dps_distribution, self.rotation_dps_support
-        )
-
-        # Now all the damage distributions have been computed, can convert to DPS
-        # action dps distributions. We also coarsen the support to 0.5 DPS
-        # or else this uses a lot of memory
-        for idx in range(len(self.action_dps_distributions)):
-            lower, upper = self.action_dps_support[idx][0] / self.t, self.action_dps_support[idx][-1] / self.t 
-            # Some actions like healer autos don't span a large DPS range and don't need to be coarsened.
-            if upper - lower > 10:
-                new_action_support = np.arange(int(lower), int(upper) + 0.5, step=0.5)
-                self.action_dps_distributions[idx] = np.interp(new_action_support, self.action_dps_support[idx] / self.t, self.action_dps_distributions[idx])
-                self.action_dps_support[idx] = new_action_support
-
-            self.action_dps_distributions[idx] /= np.trapz(
-                self.action_dps_distributions[idx], self.action_dps_support[idx]
-            )
-
-        for u in unique_action_names:
-            self.unique_actions_distribution[u]["support"] /= self.t
-            self.unique_actions_distribution[u]["dps_distribution"] /= np.trapz(
-                self.unique_actions_distribution[u]["dps_distribution"],
-                self.unique_actions_distribution[u]["support"],
-            )
-
-        pass
-
-    @classmethod
-    def moments_to_skew_norm(self, mean, variance, skewness):
-        """
-        Converts the mean, variance, and Pearson's skewness to parameters defined by skew normal.
-        The parameters are not the same, but can be interconverted: https://en.wikipedia.org/wiki/Skew_normal_distribution
-        """
-
-        delta = np.sqrt(
-            np.pi
-            / 2
-            * (np.abs(skewness)) ** (2 / 3)
-            / (np.abs(skewness) ** (2 / 3) + ((4 - np.pi) / 2) ** (2 / 3))
-        )
-        alpha = np.sign(skewness) * delta / np.sqrt(1 - delta**2)
-        omega = np.sqrt(variance / (1 - 2 * delta**2 / np.pi))
-        squigma = mean - omega * delta * np.sqrt(2 / np.pi)
-
-        return alpha, omega, squigma
-
-    def convolve_pmf(self, action_idx):
+    def compute_dps_distribution(self):
         """
         Convolve the single-hit PMF of a action n_hit times to get the exact PMF of an action landing n_hits.
-
-        Inputs:
-        action_idx - index of an action to compute the damage distribution for
 
         returns:
         dmg_support - np array of the damage support
@@ -749,7 +554,6 @@ class Rotation:
             for a in range(len(partition_set) - 1):
                 # Self-add: e.g., 1 + 1 = 2
                 if partition_set[a] + partition_set[a] == partition_set[a + 1]:
-                    # print(f"a = {partition_set[a]}: self add {partition_set[a]} + {partition_set[a]}")
                     convolve_dict[partition_set[a + 1]] = fftconvolve(
                         convolve_dict[partition_set[a]], convolve_dict[partition_set[a]]
                     )
@@ -758,7 +562,6 @@ class Rotation:
                 elif (a > 0) & (
                     partition_set[a - 1] + partition_set[a] == partition_set[a + 1]
                 ):
-                    # print(f"a = {partition_set[a]}: prev add {partition_set[a-1]} + {partition_set[a]}")
                     convolve_dict[partition_set[a + 1]] = fftconvolve(
                         convolve_dict[partition_set[a - 1]],
                         convolve_dict[partition_set[a]],
@@ -768,61 +571,413 @@ class Rotation:
                 elif (a > 0) & (
                     partition_set[a] + partition_set[0] == partition_set[a + 1]
                 ):
-                    # print(f"a = {partition_set[a]}: 1 add {partition_set[0]} + {partition_set[a]}")
                     convolve_dict[partition_set[a + 1]] = fftconvolve(
                         convolve_dict[partition_set[0]], convolve_dict[partition_set[a]]
                     )
 
             return convolve_dict[n]
 
-        # make a shorter variable name cause this long
-        action_moment = self.action_moments[action_idx]
-
         # Define the bounds of the mixture distribution (lowest roll NH and highest roll CDH)
         # Everything is integers, so the bounds can be defined with an arange
-        min_roll = np.floor(action_moment.normal_supp[0]).astype(int)
-        max_roll = np.floor(action_moment.crit_dir_supp[-1]).astype(int)
+        min_roll = np.floor(self.normal_supp[0]).astype(int)
+        max_roll = np.floor(self.crit_dir_supp[-1]).astype(int)
 
-        self.one_hit_pmf = np.zeros(max_roll - min_roll + 1)
+        one_hit_pmf = np.zeros(max_roll - min_roll + 1)
 
         # Need to find out how many indices away the start of each hit-type subdistribution is from
         # the lower bound of the mixture distribution.
-        ch_offset = int(action_moment.crit_supp[0] - action_moment.normal_supp[0])
-        dh_offset = int(action_moment.dir_supp[0] - action_moment.normal_supp[0])
-        cdh_offset = int(action_moment.crit_dir_supp[0] - action_moment.normal_supp[0])
+        ch_offset = int(self.crit_supp[0] - self.normal_supp[0])
+        dh_offset = int(self.dir_supp[0] - self.normal_supp[0])
+        cdh_offset = int(self.crit_dir_supp[0] - self.normal_supp[0])
 
         # Set up slices to include gaps
-        normal_slice = (
-            action_moment.normal_supp - action_moment.normal_supp[0]
-        ).astype(int)
-        ch_slice = (
-            action_moment.crit_supp - action_moment.crit_supp[0] + ch_offset
-        ).astype(int)
-        dh_slice = (
-            action_moment.dir_supp - action_moment.dir_supp[0] + dh_offset
-        ).astype(int)
-        cdh_slice = (
-            action_moment.crit_dir_supp - action_moment.crit_dir_supp[0] + cdh_offset
-        ).astype(int)
+        normal_slice = (self.normal_supp - self.normal_supp[0]).astype(int)
+        ch_slice = (self.crit_supp - self.crit_supp[0] + ch_offset).astype(int)
+        dh_slice = (self.dir_supp - self.dir_supp[0] + dh_offset).astype(int)
+        cdh_slice = (self.crit_dir_supp - self.crit_dir_supp[0] + cdh_offset).astype(
+            int
+        )
 
         # Mixture distribution defined with multinomial weights
-        self.one_hit_pmf[normal_slice] = (
-            action_moment.p[0] / action_moment.normal_supp.size
+        one_hit_pmf[normal_slice] = self.p[0] / self.normal_supp.size
+        one_hit_pmf[ch_slice] = self.p[1] / self.crit_supp.size
+        one_hit_pmf[dh_slice] = self.p[2] / self.dir_supp.size
+        one_hit_pmf[cdh_slice] = self.p[3] / self.crit_dir_supp.size
+
+        # The support needs to be able to account for trimming out
+        # normal hits when there are guaranteed hit types.
+        # Possible hit types are encoded as 1 (possible) and 0 (impossible)
+        possible_hit_types = np.array([1, 1, 1, 1])
+        possible_hit_types[self.p == 0] = 0
+
+        # Lowest for each hit type
+        lowest_roll = np.array(
+            [
+                self.normal_supp[0],
+                self.crit_supp[0],
+                self.dir_supp[0],
+                self.crit_dir_supp[0],
+            ]
         )
-        self.one_hit_pmf[ch_slice] = action_moment.p[1] / action_moment.crit_supp.size
-        self.one_hit_pmf[dh_slice] = action_moment.p[2] / action_moment.dir_supp.size
-        self.one_hit_pmf[cdh_slice] = (
-            action_moment.p[3] / action_moment.crit_dir_supp.size
+        # Lowest roll for only possible hit types
+        lowest_roll = (possible_hit_types * lowest_roll)[
+            (possible_hit_types * lowest_roll) > 0
+        ].min() * self.n
+
+        highest_roll = self.crit_dir_supp[-1] * self.n
+
+        # 1-hit damage support
+        one_hit_support = np.arange(
+            lowest_roll // self.n, highest_roll // self.n + 1, step=1
         )
 
-        conv_pmf = convolve_by_partitions(self.one_hit_pmf, action_moment.n)
-        lowest_roll = int(np.floor(action_moment.normal_supp[0]) * action_moment.n)
+        # Coarsened 1-hit support
+        coarsened_start, coarsened_end = _coarsened_boundaries(
+            lowest_roll // self.n, highest_roll // self.n, self.action_delta
+        )
+        coarsened_one_hit_support = np.arange(
+            coarsened_start, coarsened_end + self.action_delta, step=self.action_delta
+        )
+        # Coarsened with spacing of self.action_delta
+        coarsened_n_hit_support = np.arange(
+            coarsened_start * self.n,
+            coarsened_end * self.n + self.action_delta,
+            step=self.action_delta,
+        ).astype(float)
 
-        dmg_supp = np.arange(lowest_roll, conv_pmf.size + lowest_roll, step=1).astype(
-            float
+        # If there are guaranteed hits, normal hits are impossible
+        # and the one-hit pmf has a lot of zeros to the array.
+        # This makes the convolution unnecessarily expensive.
+        # These 0 values can be trimmed out
+        one_hit_pmf = np.trim_zeros(one_hit_pmf)
+        # Coarsen onto support with spacing `self.action_delta`
+        coarsened_one_hit_pmf = np.interp(
+            coarsened_one_hit_support, one_hit_support, one_hit_pmf
         )
 
-        return dmg_supp, conv_pmf
+        conv_pmf = convolve_by_partitions(coarsened_one_hit_pmf, self.n)
+
+        return coarsened_n_hit_support, conv_pmf
+
+
+class Rotation:
+    def __init__(
+        self,
+        rotation_df,
+        t,
+        convolve_all=False,
+        rotation_delta: int = 100,
+        action_delta: int = 10,
+    ) -> None:
+        """
+        Get damage variability for a rotation.
+
+        Inputs:
+        rotation_df: rotation dataframe with the following columns and types:
+                     action_name: str, unique name of an action. Unique action depends on `buffs`, `p`, and `l_c` present.
+                     base_action: str, name of an action ignoring buffs. For example, Glare III with chain stratagem
+                                       and Glare III with mug will have different `action_names`, but the same base_action.
+                                       Used for grouping actions together.
+                    p_n: probability of a normal hit.
+                    p_c: probability of a critical hit.
+                    p_d: probability of a direct hit.
+                    p_cd: probability of a critical-direct hit.
+                    d2: int, base damage value of action before any variability.
+                    l_c: int, damage multiplier for a critical hit.
+                              Value should be in the thousands (1250 -> 125% crit buff).
+                     d2: int, base damage value of action before any variability.
+                     l_c: int, damage multiplier for a critical hit.
+                               Value should be in the thousands (1250 -> 125% crit buff).
+                    buffs: Total buff strength, or a list of buffs. A 10% buff should be represented as 1.1.
+                           A 5% and 10% buff can be represented as either 1.155 or [1.05, 1.10], but the former is preferred.
+                           Saving a dataframe with array columns can be finnicky.
+                     is_dot: boolean or 0/1, whether the action is a damage over time effect.
+        t: float, time elapsed in seconds. Set t=1 to get damage dealt instead of DPS.
+        convolve_all: bool, whether to compute all DPS distributions by convolutions (normally actions with large n can be computed with a skew normal distribution).
+        action_delta - amount to discretize damage of actions by.
+                       Instead of representing damage in steps of 1, 100, 101, 102, ..., 200,
+                       damage is represented in steps of `action_delta`, 100, 110, 120, ..., 200.
+                       Generally a value of 10 gives a good balance of speed and accuracy.
+                       Larger values result in a faster calculation, but less accurate damage distributions.
+        rotation_delta - Amount to discretize damage of unique actions by, for computing the rotation damage distribution.
+                         Same rationale for actions, but just after all unique actions are grouped together.
+        """
+        column_check = set(["base_action", "action_name"])
+        missing_columns = column_check - set(rotation_df.columns)
+        if len(missing_columns) != 0:
+            raise ValueError(
+                f"The following column(s) are missing from `rotation_df`: {*missing_columns,}. Please refer to the docstring and add these field(s) or double check the spelling."
+            )
+
+        self.rotation_df = rotation_df
+        self.t = t
+        # Deprecated/currently unused
+        self.convolve_all = convolve_all
+        # Damage is discretized by this much.
+        # Bigger number = faster but larger discretization error
+        # Smaller number = slower but more accurate.
+        self.rotation_delta = rotation_delta
+        self.action_delta = action_delta
+
+        self.action_moments = [
+            ActionMoments(row, t, action_delta=action_delta)
+            for _, row in rotation_df.iterrows()
+        ]
+        self.action_names = rotation_df["action_name"].tolist()
+        self.action_means = np.array([x.mean for x in self.action_moments])
+        self.action_variances = np.array([x.variance for x in self.action_moments])
+        self.action_std = np.sqrt(self.action_variances)
+        self.action_skewness = np.array([x.skewness for x in self.action_moments])
+
+        self.rotation_mean = np.sum(self.action_means)
+        self.rotation_variance = np.sum(self.action_variances)
+        self.rotation_std = np.sqrt(self.rotation_variance)
+        # Need just the numerator of Pearson's skewness, which is why we multiply by the action variances inside the sum
+        self.rotation_skewness = np.sum(
+            self.action_skewness * self.action_variances ** (3 / 2)
+        ) / np.sum(self.action_variances) ** (3 / 2)
+
+        self.compute_dps_distributions()
+
+        pass
+
+    def compute_dps_distributions(self) -> None:
+        """
+        Compute and set the support and PMF of DPS distributions.
+
+        This method is broken into 2 sections
+        (i) Unique actions (Action A with Buff 1 and Action A with Buff 2 are group together now).
+        (ii) The entire rotation.
+        """
+        # Specifics on convolving everything together because there are quite a few nuances to
+        # do things efficiently while still being correct.
+        # All damage distributions is convolved together using damage and not DPS.
+        # The supports of each distribution must be on the same grid for the convolution to correctly
+        # correspond to a sum of random variables. Converting to DPS usually ends up with floats, so
+        # dealing with integer values of damage is a much more convenient unit to work in.
+
+        # At first, we just keep everything in terms of damage, and the supports are just
+        # all integers from the lower to upper bound. However, this makes the convolutions very expensive.
+        # The computational cost is N log N, where N is the number of integers between the lower (all hits normal)
+        # and upper (all hits critical-direct) bound. This can get very large (N ~ 1e7-1e8) and become
+        # computationally expensive, even with N log N complexity. Instead of working in steps of 1 damage,
+        # we can work in higher steps of damage, like 100/1000/10000/etc, by interpolating the damage
+        # distributions to a coarser grid. This process is referred to as "coarsening".
+
+        # The major consideration for coarsening is when to coarsen and by how much.
+        # Coarsening leads to a greater reduction in computational efficiency when N becomes large.
+        # All action distributions are initially convolved in steps of 1 damage n_hit times.
+        # Unique action distributions are also convolved in steps of 1 damage, and then coarsened.
+
+        # The action with the smallest damage span will limit how much the support can be coarsened by.
+        # The auto-attacks of a WHM only span 10s of damage, but their Afflatus Misery action can span 10,000s.
+        # This is a somewhat unique case, which also makes the argument that auto-attacks can be ignored.
+        # By default, damage is discretized in steps of 250, which seemed to still give good accuracy.
+        # This also means that actions with very low damage spans are ignored, like healer auto attacks.
+        # This wont have a large impact on the rotation damage distribution.
+        # A future update might work on dynamically setting this value, or allow for different spacings,
+        # which are unified at the very end.
+
+        # section (0), individual actions, just unpack from the action moments
+        self.action_dps_support = [x.damage_support for x in self.action_moments]
+        self.action_dps_distributions = [
+            x.damage_distribution for x in self.action_moments
+        ]
+        self.rotation_dps_distribution = None
+
+        # Section (ii) base actions
+        # Neat little function which says which base_action each index belongs to
+        idx, unique_action_names = pd.factorize(self.rotation_df["base_action"])
+        self.unique_actions = {}
+        self.unique_actions = {n: [] for n in unique_action_names}
+
+        for i, x in enumerate(idx):
+            self.unique_actions[unique_action_names[x]].append(i)
+
+        self.unique_actions_distribution = {}
+
+        # Now loop over unique action indices and convolve together
+        for _, (name, action_idx_list) in enumerate(self.unique_actions.items()):
+            action_low_high = np.zeros((len(self.unique_actions[name]), 2))
+
+            # Support is sum of all lowest possible value (min roll NH) to highest possible value (max roll CDH)
+            for idx, action_idx in enumerate(action_idx_list):
+                action_low_high[idx, :] = np.array(
+                    [
+                        self.action_dps_support[action_idx].min(),
+                        self.action_dps_support[action_idx].max(),
+                    ]
+                )
+
+            if len(action_idx_list) == 1:
+                action_dps_distribution = self.action_dps_distributions[
+                    action_idx_list[0]
+                ]
+
+            elif len(action_idx_list) > 1:
+                action_dps_distribution = fftconvolve(
+                    self.action_dps_distributions[action_idx_list[0]],
+                    self.action_dps_distributions[action_idx_list[1]],
+                )
+
+            if len(action_idx_list) > 2:
+                for idx in range(1, len(action_idx_list) - 1):
+                    action_dps_distribution = fftconvolve(
+                        action_dps_distribution,
+                        self.action_dps_distributions[action_idx_list[idx + 1]],
+                    )
+                # For some reason these numbers get super tiny fast
+                # and can lead to underflow, so periodically make them on the order of 1
+                # if they get too small. Normalization is irrelevant since these get normalized
+                # later
+                if action_dps_distribution.max() < 1e-75:
+                    action_dps_distribution /= action_dps_distribution.max()
+
+            # Coarsen support in prep for rotation distribution
+            uncoarsened_support = np.arange(
+                action_low_high[:, 0].sum(),
+                action_low_high[:, 1].sum() + self.action_delta,
+                step=self.action_delta,
+            )
+
+            coarsened_start, coarsened_end = _coarsened_boundaries(
+                action_low_high[:, 0].sum(),
+                action_low_high[:, 1].sum(),
+                self.rotation_delta,
+            )
+
+            coarsened_support = np.arange(
+                coarsened_start,
+                coarsened_end + self.rotation_delta,
+                step=self.rotation_delta,
+            )
+
+            action_dps_distribution = np.interp(
+                coarsened_support, uncoarsened_support, action_dps_distribution
+            )
+
+            self.unique_actions_distribution[name] = {
+                "support": coarsened_support,
+                "dps_distribution": action_dps_distribution,
+            }
+
+        # Section (iii) whole rotation
+        rotation_lower_bound = np.array(
+            [v["support"][0] for _, v in self.unique_actions_distribution.items()]
+        ).sum()
+        rotation_upper_bound = np.array(
+            [v["support"][-1] for _, v in self.unique_actions_distribution.items()]
+        ).sum()
+
+        # `self.rotation_dps_distribution` needs to first be defined by convolving the first two unique actions together
+        # then we can loop starting at the second index.
+        if len(unique_action_names) > 1:
+            self.rotation_dps_distribution = fftconvolve(
+                self.unique_actions_distribution[unique_action_names[0]][
+                    "dps_distribution"
+                ],
+                self.unique_actions_distribution[unique_action_names[1]][
+                    "dps_distribution"
+                ],
+            )
+        # Special case if theres only one action, just return the first element.
+        else:
+            self.rotation_dps_distribution = self.unique_actions_distribution[
+                unique_action_names[0]
+            ]["dps_distribution"]
+
+        # Now loop
+        if len(unique_action_names) > 2:
+            for a in range(2, len(unique_action_names)):
+                self.rotation_dps_distribution = fftconvolve(
+                    self.unique_actions_distribution[unique_action_names[a]][
+                        "dps_distribution"
+                    ],
+                    self.rotation_dps_distribution,
+                )
+                if self.rotation_dps_distribution.max() < 1e-75:
+                    self.rotation_dps_distribution /= (
+                        self.rotation_dps_distribution.max()
+                    )
+
+        # Create support and convert to DPS
+        # Boundaries for coarsened distribution
+        coarsened_rotation_start, coarsened_rotation_end = _coarsened_boundaries(
+            rotation_lower_bound,
+            rotation_upper_bound,
+            self.rotation_delta,
+        )
+        rotation_dps_support = (
+            np.arange(
+                coarsened_rotation_start,
+                coarsened_rotation_end + self.rotation_delta,
+                step=self.rotation_delta,
+            ).astype(float)
+            / self.t
+        )
+
+        self.rotation_dps_support = np.arange(
+            int(rotation_dps_support[1]), int(rotation_dps_support[-1]) + 0.5, step=0.5
+        )
+        self.rotation_dps_distribution = np.interp(
+            self.rotation_dps_support,
+            rotation_dps_support,
+            self.rotation_dps_distribution,
+        )
+        # And renormalize the DPS distribution
+        self.rotation_dps_distribution /= np.trapz(
+            self.rotation_dps_distribution, self.rotation_dps_support
+        )
+
+        # Now all the damage distributions have been computed, can convert to DPS
+        # action dps distributions. We also coarsen the support to 0.5 DPS
+        # or else this uses a lot of memory
+        for idx in range(len(self.action_dps_distributions)):
+            lower, upper = (
+                self.action_dps_support[idx][0] / self.t,
+                self.action_dps_support[idx][-1] / self.t,
+            )
+            # Some actions like healer autos don't span a large DPS range and don't need to be coarsened.
+            if upper - lower > 10:
+                new_action_support = np.arange(int(lower), int(upper) + 0.5, step=0.5)
+                self.action_dps_distributions[idx] = np.interp(
+                    new_action_support,
+                    self.action_dps_support[idx] / self.t,
+                    self.action_dps_distributions[idx],
+                )
+                self.action_dps_support[idx] = new_action_support
+
+            self.action_dps_distributions[idx] /= np.trapz(
+                self.action_dps_distributions[idx], self.action_dps_support[idx]
+            )
+
+        for u in unique_action_names:
+            self.unique_actions_distribution[u]["support"] /= self.t
+            self.unique_actions_distribution[u]["dps_distribution"] /= np.trapz(
+                self.unique_actions_distribution[u]["dps_distribution"],
+                self.unique_actions_distribution[u]["support"],
+            )
+
+        pass
+
+    @classmethod
+    def moments_to_skew_norm(self, mean, variance, skewness):
+        """
+        Converts the mean, variance, and Pearson's skewness to parameters defined by skew normal.
+        The parameters are not the same, but can be interconverted: https://en.wikipedia.org/wiki/Skew_normal_distribution
+        """
+
+        delta = np.sqrt(
+            np.pi
+            / 2
+            * (np.abs(skewness)) ** (2 / 3)
+            / (np.abs(skewness) ** (2 / 3) + ((4 - np.pi) / 2) ** (2 / 3))
+        )
+        alpha = np.sign(skewness) * delta / np.sqrt(1 - delta**2)
+        omega = np.sqrt(variance / (1 - 2 * delta**2 / np.pi))
+        squigma = mean - omega * delta * np.sqrt(2 / np.pi)
+
+        return alpha, omega, squigma
 
     def plot_action_distributions(self, ax=None, **kwargs):
         """

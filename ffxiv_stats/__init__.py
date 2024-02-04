@@ -2,11 +2,11 @@
 Compute damage variability in the critically acclaimed MMORPG Final Fantasy XIV.
 
 Account for variability from hit types, random damage rolls, and rotations.
-This module computes exact damage/DPS distributions or the first three moments (mean, variance, skewness).
+This module computes exact damage DPS distributions or the first three moments (mean, variance, skewness).
 
 """
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 
 from ffxiv_stats import moments, rate, jobs, modifiers
 from ffxiv_stats.moments import Rotation

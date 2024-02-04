@@ -1,4 +1,5 @@
 import numpy as np
+
 from .modifiers import level_mod
 
 
@@ -53,7 +54,7 @@ class Rate:
         """
         return np.floor(550 / self.lvl_div * (self.dh_amt - self.lvl_sub)) / 1000
 
-    def get_p(self, ch_mod=0, dh_mod=0, keep_cd=True):
+    def get_p(self, ch_mod=0, dh_mod=0, guaranteed_hit_type=0):
         """
         Get the probability of each hit type occurring given the probability of a critical hit and direct hit
 
@@ -63,33 +64,104 @@ class Rate:
         ch_mod: Percentage to increase the base critical hit rate by if buffs are present.
                 E.g., ch_mod=0.1 would add 0.1 to the base critical hit rate
         dh_mod: Percentage to increase the base direct hit rate by if buffs are present.
-        keep_cd: bool, Exploratory argument to see what happens critical-direct hits are removed.
-                 THIS SHOULD ALWAYS BE TRUE IF FOR IN GAME CALCULATIONS.
-                 If true, the probability is p_c*p_d, otherwise 0
+        guaranteed_hit_type: get probability for a guaranteed hit type.
+                             Parameters ch_mod and dh_mod have no effect if this is non-zero
+                             0 - no hit type guaranteed
+                             1 - guaranteed critical hit
+                             2 - guaranteed direct hit
+                             3 - guaranteed critical-direct hit
 
         returns:
         probability of each hit type, [normal hit, critical hit given not CD hit, direct hit given not CDH hit, CDH hit]
         """
+        # Floating point error can be resolved with round
+        # Probabilities in FFXIV only use 3 significant digits because of flooring
+        # The most number of significant digits is 6 for critical direct hits,
+        # since it's a product of critical hit (3) and direct hit (3) = 6 sig digits
+        # Just use 10 cause yolo, p sums to 1
 
-        # Sometimes the probabilities don't sum to exactly 1.0 because of floating point error.
-        # Sometimes SciPy's multinomial class will break because of that and just return NaN for probabilities.
-        # Using the Decimal class with arbitrary precision and then converting them back to a float remedies this I guess.
-        # Floating point math is stupid.
-        from decimal import Decimal
+        # Why does p have to sum to 1 without any floating point error?
+        # scipy's multinomial weights will return nan if they do not.
+        p_c = round(self.crit_prob() + ch_mod, 10)
+        p_d = round(self.direct_hit_prob() + dh_mod, 10)
 
-        p_c = Decimal(self.crit_prob() + ch_mod)
-        p_d = Decimal(self.direct_hit_prob() + dh_mod)
-        if keep_cd:
-            p_cd = Decimal(p_c) * Decimal(p_d)
+        if guaranteed_hit_type == 1:
+            p_c = 1.0
+        elif guaranteed_hit_type == 2:
+            p_d = 1.0
+        elif guaranteed_hit_type == 3:
+            return np.array([0, 0, 0, 1.0])
 
-        else:
-            p_cd = Decimal(0)
+        p_cd = round(p_c * p_d, 10)
 
         return np.array(
             [
-                float(Decimal(1.0) - p_c - p_d + p_cd),
-                float(p_c - p_cd),
-                float(p_d - p_cd),
-                float(p_cd),
+                round(1.0 - p_c - p_d + p_cd, 10),
+                round(p_c - p_cd, 10),
+                round(p_d - p_cd, 10),
+                p_cd,
             ]
         )
+
+    def get_hit_type_damage_buff(
+        self,
+        guaranteed_hit_type=0,
+        buff_crit_rate=0,
+        buff_dh_rate=0,
+        determination=None,
+    ):
+        """
+        Compute the damage buff granted to a hit-type buff acting upon an action with a guaranteed hit type.
+        guaranteed_hit_type: integer representing the guaranteed hit type:
+                             0 - normal hit (why are you calling this function)
+                             1 - critical hit
+                             2 - direct hit
+                             3 - critical direct hit
+        buff_crit_rate: how much a buff increases the crit rate by, e.g., 10% increase -> 0.1.
+                        Leave as 0 if no crit buff is present.
+        buff_dh_rate: how much a buff increases the direct hit rate by, e.g., 10% increase -> 0.1.
+                      Leave as 0 if no direct hit buff is present.
+        determination: determination stat value. Used only for direct hit buffs,
+                       as the direct hit rate stat gets added to the determination stat
+                       to create and effective determination multiplier.
+        """
+        if guaranteed_hit_type == 0:
+            return 1
+
+        # Damage buff for crit rate buff
+        unbuffed_crit_rate = self.crit_prob()
+        buffed_crit_rate = round(unbuffed_crit_rate + buff_crit_rate, 3)
+
+        crit_buff = 1 + (
+            (buffed_crit_rate - unbuffed_crit_rate) * (unbuffed_crit_rate + 0.35)
+        )
+
+        if guaranteed_hit_type == 1:
+            return crit_buff
+
+        # Damage buff for direct hit rate buff
+        unbuffed_dh_rate = self.direct_hit_prob()
+        buffed_dh_rate = round(unbuffed_dh_rate + buff_dh_rate, 3)
+
+        if determination is None:
+            raise ValueError(
+                "Determination stat value must be specified because Direct Hit rate buffs depend on the base Determination stat"
+            )
+
+        dh_buff = 1 + ((buffed_dh_rate - unbuffed_dh_rate) * 0.25)
+        # Add DH rate to determination stat for new effective det multiplier
+        det_and_dh_amt = (determination - self.lvl_main) + (self.dh_amt - self.lvl_sub)
+        dh_buff *= np.floor(((140 * (det_and_dh_amt)) / self.lvl_div) + 1000) / 1000
+        # Divide out the original determination multiplier so it isn't double counted.
+        dh_buff /= (
+            np.floor(((140 * (determination - self.lvl_main)) / self.lvl_div) + 1000)
+        ) / 1000
+
+        dh_buff = round(dh_buff, 6)
+        # Works for either guaranteed direct hits or guaranteed critical-direct hits
+        # for the former, crit_buff = 1
+        return round(crit_buff * dh_buff, 6)
+
+
+if __name__ == "__main__":
+    pass
