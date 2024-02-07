@@ -204,12 +204,14 @@ class ActionMoments(Support):
         if not separated_p:
             self.p = action_df["p"]
         else:
-            self.p = [
-                action_df["p_n"],
-                action_df["p_c"],
-                action_df["p_d"],
-                action_df["p_cd"],
-            ]
+            self.p = np.array(
+                [
+                    action_df["p_n"],
+                    action_df["p_c"],
+                    action_df["p_d"],
+                    action_df["p_cd"],
+                ]
+            )
 
         self.t = t
         if "action_name" in action_df:
@@ -612,6 +614,7 @@ class ActionMoments(Support):
         possible_hit_types[self.p == 0] = 0
 
         # Lowest for each hit type
+        # Guaranteed critical/direct hits make normal hits impossible
         lowest_roll = np.array(
             [
                 self.normal_supp[0],
@@ -625,7 +628,19 @@ class ActionMoments(Support):
             (possible_hit_types * lowest_roll) > 0
         ].min() * self.n
 
-        highest_roll = self.crit_dir_supp[-1] * self.n
+        # If no DH is melded, it's impossible to DH
+        highest_roll = np.array(
+            [
+                self.normal_supp[-1],
+                self.crit_supp[-1],
+                self.dir_supp[-1],
+                self.crit_dir_supp[-1],
+            ]
+        )
+
+        highest_roll = (possible_hit_types * highest_roll)[
+            (possible_hit_types * highest_roll) > 0
+        ].max() * self.n
 
         # 1-hit damage support
         one_hit_support = np.arange(
@@ -666,9 +681,9 @@ class Rotation:
         self,
         rotation_df,
         t,
-        convolve_all=False,
-        rotation_delta: int = 100,
+        rotation_delta: int = 50,
         action_delta: int = 10,
+        convolve_all=False,
     ) -> None:
         """
         Get damage variability for a rotation.
