@@ -3,8 +3,8 @@ from numpy import floor as nf
 
 from warnings import warn
 
-# from .moments import Rotation
-# from .modifiers import level_mod
+from .moments import Rotation
+from .modifiers import level_mod
 
 
 class BaseStats(Rotation):
