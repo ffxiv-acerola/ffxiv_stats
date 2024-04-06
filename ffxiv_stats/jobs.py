@@ -3,8 +3,8 @@ from numpy import floor as nf
 
 from warnings import warn
 
-from .moments import Rotation
-from .modifiers import level_mod
+# from .moments import Rotation
+# from .modifiers import level_mod
 
 
 class BaseStats(Rotation):
@@ -463,7 +463,7 @@ class Healer(BaseStats):
 
         Many of the pet stats are used to compute an effective pet attack power, given by:
         effective_pet_attack_power = floor(pet_attack_power_scalar * (pet_attack_power + pet_attack_power_offset))
-        
+
         Args:
             mind (int): Mind
             strength (int): Strength stat, for auto attacks.
@@ -606,6 +606,73 @@ class Tank(BaseStats):
         pass
 
 
+class MagicalRanged(BaseStats):
+    def __init__(
+        self,
+        intelligence: int,
+        strength: int,
+        det: int,
+        spell_speed: int,
+        crit_stat: int,
+        dh_stat: int,
+        weapon_damage: int,
+        delay: float,
+        pet_attack_power: int = None,
+        pet_attack_power_scalar: float = 0.88,
+        pet_attack_power_offset: int = -48,
+        pet_job_attribute: int = 100,
+        pet_atk_mod: int = 195,
+        level: int = 90,
+    ) -> None:
+        """Set stats specific to magical ranged, to compute damage from potency.
+
+        Many of the pet stats are used to compute an effective pet attack power, given by:
+        effective_pet_attack_power = floor(pet_attack_power_scalar * (pet_attack_power + pet_attack_power_offset))
+        Args:
+            intelligence (int): intelligence stat.
+            strength (int): strength stat, for auto attacks.
+            det (int): determination stat.
+            spell_speed (int): spell speed stat.
+            crit_stat (int): critical hit stat.
+            dh_stat (int): direct hit rate stat
+            weapon_damage (int): weapon damage stat.
+            delay (float): weapon delay stat, for auto attacks
+            pet_attack_power (int, optional): Attack power of pet, typically intelligence without the n% party bonus. Defaults to None.
+            pet_attack_power_scalar (float, optional): Scalar to apply to pet attack power to account for pet potency. Defaults to 0.88, the default value for SMN.
+            pet_attack_power_offset (int, optional): Attack power amount to add to attack power. Usually -48 to subtract out hidden trait stats. This value is also multiplied by pet_attack_power_scalar. Defaults to -48, the default value for SMN.
+            pet_job_attribute (int, optional): Pet job attribute, which is different from that of the player. Defaults to 100.
+            pet_atk_mod (int, optional): Pet attack modifier, which is usually the same as the player. Defaults to 195.
+            level (int, optional): Player level. Defaults to 90.
+        """
+        super().__init__(
+            attack_power=intelligence,
+            trait=130,
+            main_stat=intelligence,
+            strength=strength,
+            det=det,
+            crit_stat=crit_stat,
+            dh_stat=dh_stat,
+            dot_speed_stat=spell_speed,
+            auto_speed_stat=400,
+            weapon_damage=weapon_damage,
+            delay=delay,
+            pet_attack_power=pet_attack_power,
+            pet_attack_power_scalar=pet_attack_power_scalar,
+            pet_attack_power_offset=pet_attack_power_offset,
+            pet_job_attribute=pet_job_attribute,
+            pet_atk_mod=pet_atk_mod,
+            level=level,
+        )
+
+        self.add_role("Caster")
+
+        self.auto_trait = 100
+        self.dot_speed_stat = spell_speed
+        self.auto_speed_stat = 400
+
+        pass
+
+
 # class PhysicalRanged(BaseStats):
 #     def __init__(self, mind, intelligence, vitality, strength, dexterity, det,
 #                  skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay, level=90) -> None:
@@ -635,35 +702,6 @@ class Tank(BaseStats):
 #         self.skill_speed = skill_speed
 #         self.spell_speed = spell_speed
 #         pass
-
-# class MagicalRanged(BaseStats):
-#     def __init__(self, mind, intelligence, vitality, strength, dexterity, det,
-#                  skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay, level=90) -> None:
-#         """
-#         Set magical ranged-specific stats with this class like main stat, traits, etc.
-
-#         inputs:
-#         mind - int, mind stat
-#         intelligence - int, intelligence stat
-#         vitality - int, vitality stat
-#         strength, - int, strength stat
-#         dexterity - int, strength stat
-#         det - int, determination stat
-#         skill_speed - int, skill speed stat
-#         spell_speed - int, spell speed stat
-#         tenacity - tenacity stat
-#         crit_stat - critical hit stat
-#         dh_stat - direct hit rate stat
-#         weapon_damage - weapon damage stat
-#         delay - weapon delay stat
-#         """
-#         super().__init__(intelligence, 130, intelligence, mind, intelligence, vitality, strength, dexterity, det,
-#                          tenacity, crit_stat, dh_stat, spell_speed, skill_speed, weapon_damage, delay, level=90)
-
-#         self.add_role('Caster')
-
-#         self.skill_speed = skill_speed
-#         self.spell_speed = spell_speed
 
 
 # class Melee(BaseStats):
