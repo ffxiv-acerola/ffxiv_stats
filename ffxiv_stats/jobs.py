@@ -275,7 +275,7 @@ class BaseStats(Rotation):
         # Account for healer auto attacks.
         # who use strength for AA but main stat is mind
         # All other jobs have AA scale off of main stat
-        if isinstance(self, Healer) or isinstance(MagicalRanged):
+        if isinstance(self, Healer) or isinstance(self, MagicalRanged):
             atk = (
                 np.floor(
                     self.atk_mod
@@ -734,7 +734,7 @@ class MagicalRanged(BaseStats):
 #         self.spell_speed = spell_speed
 
 if __name__ == "__main__":
-    Healer(
+    a = MagicalRanged(
         3369,
         190,
         2136,
