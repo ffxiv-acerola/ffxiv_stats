@@ -299,6 +299,95 @@ class BaseStats(Rotation):
         )
         pass
 
+    def add_role(self, role):
+        """
+        Add a role attribute to the object.
+
+        inputs:
+        role - str, which role is being modeled.
+        """
+        self.role = role
+        pass
+
+    def add_job_name(self, job_name):
+        """
+        Add a job attribute to the object.
+
+        inputs:
+        role - str, which job is being modeled.
+        """
+        self.job = job_name
+        pass
+
+    def add_description(self, description):
+        """
+        Add a description to the object. For example this could be a specific build, rotation, etc.
+
+        inputs:
+        role - str, description of this object.
+        """
+        self.description = description
+        pass
+
+    def f_wd(self):
+        """
+        Calculate weapon damage multiplier.
+        """
+        return np.floor(
+            (self.lvl_main * self.job_attribute / 1000) + self.weapon_damage
+        )
+
+    def f_atk(self, ap_adjust=0):
+        """
+        Calculate attack multiplier.
+
+        Inputs
+        ap_adjust - int, additional amount to add to attack power (main stat). Used to account for medication.
+        """
+        return (
+            np.floor(
+                self.atk_mod
+                * ((self.attack_power + ap_adjust) - self.lvl_main)
+                / self.lvl_main
+            )
+            + 100
+        )
+
+    def f_det(self):
+        """
+        Calculate determination multiplier.
+        """
+        return np.floor(140 * (self.det - self.lvl_main) / self.lvl_div + 1000)
+
+    def f_ten(self):
+        """
+        Calculate tenacity damage multiplier.
+        """
+        return np.floor(100 * (self.tenacity - self.lvl_sub) / self.lvl_div + 1000)
+
+    def f_speed_dot(self):
+        """
+        Calculate speed multiplier for damage over time attacks.
+        """
+        return np.floor(
+            130 * (self.dot_speed_stat - self.lvl_sub) / self.lvl_div + 1000
+        )
+
+    def f_speed_auto(self):
+        """
+        Calculate speed multiplier for auto attacks.
+        """
+        return np.floor(
+            130 * (self.auto_speed_stat - self.lvl_sub) / self.lvl_div + 1000
+        )
+
+    def f_auto(self):
+        return np.floor(self.f_wd() * self.delay / 3)
+
+    def get_gcd(self):
+        # TODO: add GCD (probably not essential?)
+        pass
+
     def auto_attack_d2(self, potency, ap_adjust=0, stat_override=None):
         """
         Get base damage of an auto-attack before any variability.
@@ -413,6 +502,51 @@ class BaseStats(Rotation):
                 )
                 + 1
             )
+
+    @staticmethod
+    def undo_main_stat_party_bonus(percent_bonus, main_stat_with_bonus):
+        """
+        Estimate how much main stat is applied by the party bonus.
+        Used for subtracting out for pet potency.
+        It is an estimate because of floor rounding, but should be within 1 point.
+        """
+        undone_stat_float = main_stat_with_bonus / percent_bonus
+
+        # Try to account for integer math by taking the floor and ceiling and seeing which one leads to the correct party bonus value
+        floored_undone_stat = int(np.floor(undone_stat_float))
+        ceilinged_undone_stat = int(np.ceil(undone_stat_float))
+
+        if np.floor(floored_undone_stat * percent_bonus) == main_stat_with_bonus:
+            return floored_undone_stat
+
+        else:
+            return ceilinged_undone_stat
+
+    pass
+
+    def pet_f_atk(self, ap_adjust=0):
+        """
+        Calculate attack multiplier.
+
+        Inputs
+        ap_adjust - int, additional amount to add to attack power (main stat). Used to account for medication.
+        """
+        return (
+            np.floor(
+                self.pet_atk_mod
+                * ((self.pet_effective_attack_power + ap_adjust) - self.lvl_main)
+                / self.lvl_main
+            )
+            + 100
+        )
+
+    def pet_f_wd(self):
+        """
+        Calculate weapon damage multiplier.
+        """
+        return np.floor(
+            (self.lvl_main * self.pet_job_attribute / 1000) + self.weapon_damage
+        )
 
     def pet_direct_d2(self, potency, ap_adjust=0):
         """
