@@ -6,7 +6,7 @@ This module computes exact damage DPS distributions or the first three moments (
 
 """
 
-__version__ = "0.4.3"
+__version__ = "0.4.4"
 
 from ffxiv_stats import moments, rate, jobs, modifiers
 from ffxiv_stats.moments import Rotation
