@@ -304,7 +304,7 @@ class BaseStats(Rotation):
                     )
                     / 100
                 )
-                * self.trait
+                * self.auto_trait
             )
             / 100
         )
@@ -686,35 +686,73 @@ class MagicalRanged(BaseStats):
         pass
 
 
-# class PhysicalRanged(BaseStats):
-#     def __init__(self, mind, intelligence, vitality, strength, dexterity, det,
-#                  skill_speed, spell_speed, tenacity, crit_stat, dh_stat, weapon_damage, delay, level=90) -> None:
-#         """
-#         Set physical ranged-specific stats with this class like main stat, traits, etc.
+class PhysicalRanged(BaseStats):
+    def __init__(
+        self,
+        dexterity: int,
+        det: int,
+        skill_speed: int,
+        crit_stat: int,
+        dh_stat: int,
+        weapon_damage: int,
+        delay: float,
+        pet_attack_power: int = None,
+        pet_attack_power_scalar: float = 1.,
+        pet_attack_power_offset: int = -61,
+        pet_job_attribute: int = 100,
+        pet_atk_mod: int = 195,
+        level: int = 90,
+    ) -> None:
+        """
+        Set physical ranged-specific stats with this class like main stat, traits, etc.
 
-#         inputs:
-#         mind - int, mind stat
-#         intelligence - int, intelligence stat
-#         vitality - int, vitality stat
-#         strength, - int, strength stat
-#         dexterity - int, strength stat
-#         det - int, determination stat
-#         skill_speed - int, skill speed stat
-#         spell_speed - int, spell speed stat
-#         tenacity - tenacity stat
-#         crit_stat - critical hit stat
-#         dh_stat - direct hit rate stat
-#         weapon_damage - weapon damage stat
-#         delay - weapon delay stat
-#         """
-#         super().__init__(dexterity, 120, dexterity, mind, intelligence, vitality, strength, dexterity, det,
-#                          tenacity, crit_stat, dh_stat, skill_speed, skill_speed, weapon_damage, delay, level=90)
+        inputs:
+        mind - int, mind stat
+        intelligence - int, intelligence stat
+        vitality - int, vitality stat
+        strength, - int, strength stat
+        dexterity - int, strength stat
+        det - int, determination stat
+        skill_speed - int, skill speed stat
+        spell_speed - int, spell speed stat
+        tenacity - tenacity stat
+        crit_stat - critical hit stat
+        dh_stat - direct hit rate stat
+        weapon_damage - weapon damage stat
+        delay - weapon delay stat
+        """
+        super().__init__(
+            attack_power=dexterity,
+            trait=120,
+            main_stat=dexterity,
+            strength=330,
+            det=det,
+            crit_stat=crit_stat,
+            dh_stat=dh_stat,
+            dot_speed_stat=skill_speed,
+            auto_speed_stat=skill_speed,
+            weapon_damage=weapon_damage,
+            delay=delay,
+            pet_attack_power=pet_attack_power,
+            pet_attack_power_scalar=pet_attack_power_scalar,
+            pet_attack_power_offset=pet_attack_power_offset,
+            pet_job_attribute=pet_job_attribute,
+            pet_atk_mod=pet_atk_mod,
+            level=level,
+        )
 
-#         self.add_role('Physical Ranged')
+        self.add_role("Physical Ranged")
 
-#         self.skill_speed = skill_speed
-#         self.spell_speed = spell_speed
-#         pass
+        self.auto_trait = 100
+        self.dot_speed_stat = skill_speed
+        self.auto_speed_stat = skill_speed
+
+        if level == 90:
+            self.atk_mod = 195
+        if level == 80:
+            self.atk_mod = 165
+
+        pass
 
 
 class Melee(BaseStats):
@@ -729,7 +767,7 @@ class Melee(BaseStats):
         delay: float,
         job: str,
         pet_attack_power: int = None,
-        pet_attack_power_scalar: float = 1.,
+        pet_attack_power_scalar: float = 1.0,
         pet_attack_power_offset: int = 0,
         pet_job_attribute: int = 100,
         pet_atk_mod: int = 195,
@@ -787,7 +825,9 @@ class Melee(BaseStats):
         self.job = job
 
         if job not in ("Monk", "Dragoon", "Reaper", "Ninja", "Samurai"):
-            raise ValueError("Invalid job, accepted values are {'Monk', 'Dragoon', 'Reaper', 'Ninja', 'Samurai'}")
+            raise ValueError(
+                "Invalid job, accepted values are {'Monk', 'Dragoon', 'Reaper', 'Ninja', 'Samurai'}"
+            )
 
         if job in ("Monk", "Ninja"):
             self.job_attribute = 110
