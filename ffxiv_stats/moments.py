@@ -737,6 +737,7 @@ class Rotation:
         rotation_pdf_step: int = 0.5,
         action_pdf_step: int = 1,
         purge_action_moments=False,
+        compute_mgf=True,
         convolve_all=False,
     ) -> None:
         """
@@ -805,9 +806,10 @@ class Rotation:
         self.rotation_pdf_step = rotation_pdf_step
         self.action_pdf_step = action_pdf_step
         self.purge_action_moments = purge_action_moments
+        self.compute_mgf = compute_mgf
 
         self.action_moments = [
-            ActionMoments(row, t, action_delta=action_delta)
+            ActionMoments(row, t, action_delta=action_delta, compute_mgf=compute_mgf)
             for _, row in rotation_df.iterrows()
         ]
         self.action_names = rotation_df["action_name"].tolist()
