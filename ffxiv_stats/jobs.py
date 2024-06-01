@@ -90,6 +90,8 @@ class BaseStats(Rotation):
         rotation_delta=100,
         action_pdf_step=0.5,
         rotation_pdf_step=0.5,
+        purge_action_moments=False,
+        compute_mgf=True,
     ):
         """
         Attach a rotation data frame and compute the corresponding DPS distribution.
@@ -185,6 +187,8 @@ class BaseStats(Rotation):
             rotation_delta=rotation_delta,
             action_pdf_step=action_pdf_step,
             rotation_pdf_step=rotation_pdf_step,
+            purge_action_moments=purge_action_moments,
+            compute_mgf=compute_mgf,
         )
         pass
 
