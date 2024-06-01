@@ -153,7 +153,9 @@ class Support:
 
 
 class ActionMoments(Support):
-    def __init__(self, action_df, t, action_delta=10) -> None:
+    def __init__(
+        self, action_df, t, action_delta=10, compute_mgf=True, moments_only=False
+    ) -> None:
         """
         Compute moments for a action landing n_hits
 
@@ -213,14 +215,6 @@ class ActionMoments(Support):
                 ]
             )
 
-        self.t = t
-        if "action_name" in action_df:
-            self.action_name = action_df["action_name"]
-        # All possible hit types
-        self.x = self.hit_type_combos(self.n)
-        # Corresponding multinomial weight
-        self.w = multinomial(self.n, self.p).pmf(self.x)
-
         Support.__init__(
             self,
             action_df["d2"],
@@ -229,45 +223,64 @@ class ActionMoments(Support):
             action_df["buffs"],
         )
 
-        # Lots of notation for computing moments when there are gaps
-        self._S_N = self.normal_supp.size
-        self._Z_N = np.sum(self.normal_supp)
-        self._Z_N2 = np.sum(self.normal_supp**2)
-        self._Z_N3 = np.sum(self.normal_supp**3)
+        self.t = t
+        self.compute_mgf = compute_mgf
+        self.moments_only = moments_only
 
-        self._S_C = self.crit_supp.size
-        self._Z_C = np.sum(self.crit_supp)
-        self._Z_C2 = np.sum(self.crit_supp**2)
-        self._Z_C3 = np.sum(self.crit_supp**3)
+        if "action_name" in action_df:
+            self.action_name = action_df["action_name"]
 
-        self._S_D = self.dir_supp.size
-        self._Z_D = np.sum(self.dir_supp)
-        self._Z_D2 = np.sum(self.dir_supp**2)
-        self._Z_D3 = np.sum(self.dir_supp**3)
+        # Compute first three moments, if specified
+        if self.compute_mgf:
+            # All possible hit types
+            self.x = self.hit_type_combos(self.n)
+            # Corresponding multinomial weight
+            self.w = multinomial(self.n, self.p).pmf(self.x)
 
-        self._S_CD = self.crit_dir_supp.size
-        self._Z_CD = np.sum(self.crit_dir_supp)
-        self._Z_CD2 = np.sum(self.crit_dir_supp**2)
-        self._Z_CD3 = np.sum(self.crit_dir_supp**3)
+            # Lots of notation for computing moments when there are gaps
+            self._S_N = self.normal_supp.size
+            self._Z_N = np.sum(self.normal_supp)
+            self._Z_N2 = np.sum(self.normal_supp**2)
+            self._Z_N3 = np.sum(self.normal_supp**3)
 
-        self._first_moment = self._get_first_moment()
-        self._second_moment = self._get_second_moment()
-        self._third_moment = self._get_third_moment()
+            self._S_C = self.crit_supp.size
+            self._Z_C = np.sum(self.crit_supp)
+            self._Z_C2 = np.sum(self.crit_supp**2)
+            self._Z_C3 = np.sum(self.crit_supp**3)
 
-        self.mean = self._first_moment
+            self._S_D = self.dir_supp.size
+            self._Z_D = np.sum(self.dir_supp)
+            self._Z_D2 = np.sum(self.dir_supp**2)
+            self._Z_D3 = np.sum(self.dir_supp**3)
+
+            self._S_CD = self.crit_dir_supp.size
+            self._Z_CD = np.sum(self.crit_dir_supp)
+            self._Z_CD2 = np.sum(self.crit_dir_supp**2)
+            self._Z_CD3 = np.sum(self.crit_dir_supp**3)
+
+            self._first_moment = self._get_first_moment()
+            self._second_moment = self._get_second_moment()
+            self._third_moment = self._get_third_moment()
+
+        if not self.moments_only:
+            self.action_delta = action_delta
+            self.damage_support, self.damage_distribution = (
+                self.compute_dps_distribution()
+            )
+            self.dps_support = self.damage_support / self.t
+            self.dps_distribution = self.damage_distribution / np.trapz(
+                self.damage_distribution, self.dps_support
+            )
+
+        # Use MGF to compute moments if available, otherwise use
+        self.mean = self.get_action_mean()
         self.variance = self.get_action_variance()
         self.skewness = self.get_action_skewness()
 
         # Convert from total damage to DPS
         self.mean /= self.t
         self.variance /= self.t**2
-
-        self.action_delta = action_delta
-        self.damage_support, self.damage_distribution = self.compute_dps_distribution()
-        self.dps_support = self.damage_support / self.t
-        self.dps_distribution = self.damage_distribution / np.trapz(
-            self.damage_distribution, self.dps_support
-        )
+        self.standard_deviation = np.sqrt(self.variance)
 
         pass
 
@@ -480,13 +493,32 @@ class ActionMoments(Support):
 
         return np.dot(self.w, third_deriv)
 
+    def get_action_mean(self):
+        if self.compute_mgf:
+            return self._first_moment
+        else:
+            return np.trapz(self.dps_support * self.dps_distribution, self.dps_support)
+
     def get_action_variance(self):
-        return self._second_moment - self.mean**2
+        if self.compute_mgf:
+            return self._second_moment - self.mean**2
+        else:
+            return np.trapz(
+                (self.dps_support - self.mean) ** 2 * self.dps_distribution,
+                self.dps_support,
+            )
 
     def get_action_skewness(self):
-        return (
-            self._third_moment - 3 * self.mean * self.variance - self.mean**3
-        ) / self.variance ** (3.0 / 2.0)
+        if self.compute_mgf:
+            return (
+                self._third_moment - 3 * self.mean * self.variance - self.mean**3
+            ) / self.variance ** (3.0 / 2.0)
+        else:
+            return np.trapz(
+                ((self.dps_support - self.mean) / np.sqrt(self.variance)) ** 3
+                * self.dps_distribution,
+                self.dps_support,
+            )
 
     def compute_dps_distribution(self):
         """
@@ -585,8 +617,6 @@ class ActionMoments(Support):
         min_roll = np.floor(self.normal_supp[0]).astype(int)
         max_roll = np.floor(self.crit_dir_supp[-1]).astype(int)
 
-        one_hit_pmf = np.zeros(max_roll - min_roll + 1)
-
         # Need to find out how many indices away the start of each hit-type subdistribution is from
         # the lower bound of the mixture distribution.
         ch_offset = int(self.crit_supp[0] - self.normal_supp[0])
@@ -602,6 +632,7 @@ class ActionMoments(Support):
         )
 
         # Mixture distribution defined with multinomial weights
+        one_hit_pmf = np.zeros(max_roll - min_roll + 1)
         one_hit_pmf[normal_slice] = self.p[0] / self.normal_supp.size
         one_hit_pmf[ch_slice] = self.p[1] / self.crit_supp.size
         one_hit_pmf[dh_slice] = self.p[2] / self.dir_supp.size
@@ -671,6 +702,26 @@ class ActionMoments(Support):
             coarsened_one_hit_support, one_hit_support, one_hit_pmf
         )
 
+        # Sometimes the gaps in the pmf can line up perfectly badly such that when the one-hit pmf
+        # is coarsened, it interpolates to 0's. There should be exactly 5 unique probabilities,
+        # Normal, critical, direct, critical-direct, and 0. If not, just ignore gaps in the support.
+        # This technically isn't normalized, but the PMF is normalized at the end.
+        if len(set(coarsened_one_hit_pmf)) < 5:
+            # Mixture distribution defined with multinomial weights
+            one_hit_pmf = np.zeros(max_roll - min_roll + 1)
+            one_hit_pmf[normal_slice[0] : normal_slice[-1]] = (
+                self.p[0] / self.normal_supp.size
+            )
+            one_hit_pmf[ch_slice[0] : ch_slice[-1]] = self.p[1] / self.crit_supp.size
+            one_hit_pmf[dh_slice[0] : dh_slice[-1]] = self.p[2] / self.dir_supp.size
+            one_hit_pmf[cdh_slice[0] : cdh_slice[-1]] = (
+                self.p[3] / self.crit_dir_supp.size
+            )
+
+            coarsened_one_hit_pmf = np.interp(
+                coarsened_one_hit_support, one_hit_support, one_hit_pmf
+            )
+
         conv_pmf = convolve_by_partitions(coarsened_one_hit_pmf, self.n)
 
         return coarsened_n_hit_support, conv_pmf
@@ -683,6 +734,9 @@ class Rotation:
         t,
         rotation_delta: int = 50,
         action_delta: int = 10,
+        rotation_pdf_step: int = 0.5,
+        action_pdf_step: int = 1,
+        purge_action_moments=False,
         convolve_all=False,
     ) -> None:
         """
@@ -717,6 +771,15 @@ class Rotation:
                        Larger values result in a faster calculation, but less accurate damage distributions.
         rotation_delta - Amount to discretize damage of unique actions by, for computing the rotation damage distribution.
                          Same rationale for actions, but just after all unique actions are grouped together.
+        rotation_pdf_step - final step size used when reporting `self.rotation_dps_support/distribution`. Defaults to values of 0.5 DPS,
+                            but can be changed to larger values if total damage dealt is being computed.
+        action_pdf_step - final step size used when reported `self.action_dps_support/distributions` and `self.unique_actions_support/distribution`.
+                          Defaults to a value of 1 but can be changed to larger values if total damage dealt is being computed.
+        purge_action_moments - Keeping track of uncoarsened action distributions for full fight rotations can take up a moderate amount of memory / 
+                               disk space when pickled due to array size. "Purging" these removes them  to reduce resource requirements. 
+                               These are largely intermediate variables for calculating # more familiar values - people are generally interested 
+                               in the DPS distribution for all broil IV  casts, not the individual DPS distributions for Broil IV, 
+                               Broil IV with Chain and Tech, and Broil IV with tech but not chain.
         """
         column_check = set(["base_action", "action_name"])
         missing_columns = column_check - set(rotation_df.columns)
@@ -734,6 +797,14 @@ class Rotation:
         # Smaller number = slower but more accurate.
         self.rotation_delta = rotation_delta
         self.action_delta = action_delta
+
+        # When damage distributions are saved, have the spacing be this much
+        # Useful for changing spacing with damage (t=1) vs DPS
+        # DPS steps of 0.5 - 10 make sense
+        # Damage, steps of 100 - 1000 make sense.
+        self.rotation_pdf_step = rotation_pdf_step
+        self.action_pdf_step = action_pdf_step
+        self.purge_action_moments = purge_action_moments
 
         self.action_moments = [
             ActionMoments(row, t, action_delta=action_delta)
@@ -755,6 +826,11 @@ class Rotation:
 
         self.compute_dps_distributions()
 
+
+        if self.purge_action_moments:
+            self.action_moments = [None] * len(self.action_moments)
+            del self.action_dps_distributions
+            del self.action_dps_support
         pass
 
     def compute_dps_distributions(self) -> None:
@@ -764,35 +840,35 @@ class Rotation:
         This method is broken into 2 sections
         (i) Unique actions (Action A with Buff 1 and Action A with Buff 2 are group together now).
         (ii) The entire rotation.
+        Specifics on convolving everything together because there are quite a few nuances to
+        do things efficiently while still being correct.
+        All damage distributions is convolved together using damage and not DPS.
+        The supports of each distribution must be on the same grid for the convolution to correctly
+        correspond to a sum of random variables. Converting to DPS usually ends up with floats, so
+        dealing with integer values of damage is a much more convenient unit to work in.
+
+        At first, we just keep everything in terms of damage, and the supports are just
+        all integers from the lower to upper bound. However, this makes the convolutions very expensive.
+        The computational cost is N log N, where N is the number of integers between the lower (all hits normal)
+        and upper (all hits critical-direct) bound. This can get very large (N ~ 1e7-1e8) and become
+        computationally expensive, even with N log N complexity. Instead of working in steps of 1 damage,
+        we can work in higher steps of damage, like 100/1000/10000/etc, by interpolating the damage
+        distributions to a coarser grid. This process is referred to as "coarsening".
+
+        The major consideration for coarsening is when to coarsen and by how much.
+        Coarsening leads to a greater reduction in computational efficiency when N becomes large.
+        All action distributions are initially convolved in steps of 1 damage n_hit times.
+        Unique action distributions are also convolved in steps of 1 damage, and then coarsened.
+
+        The action with the smallest damage span will limit how much the support can be coarsened by.
+        The auto-attacks of a WHM only span 10s of damage, but their Afflatus Misery action can span 10,000s.
+        This is a somewhat unique case, which also makes the argument that auto-attacks can be ignored.
+        By default, damage is discretized in steps of 250, which seemed to still give good accuracy.
+        This also means that actions with very low damage spans are ignored, like healer auto attacks.
+        This wont have a large impact on the rotation damage distribution.
+        A future update might work on dynamically setting this value, or allow for different spacings,
+        which are unified at the very end.
         """
-        # Specifics on convolving everything together because there are quite a few nuances to
-        # do things efficiently while still being correct.
-        # All damage distributions is convolved together using damage and not DPS.
-        # The supports of each distribution must be on the same grid for the convolution to correctly
-        # correspond to a sum of random variables. Converting to DPS usually ends up with floats, so
-        # dealing with integer values of damage is a much more convenient unit to work in.
-
-        # At first, we just keep everything in terms of damage, and the supports are just
-        # all integers from the lower to upper bound. However, this makes the convolutions very expensive.
-        # The computational cost is N log N, where N is the number of integers between the lower (all hits normal)
-        # and upper (all hits critical-direct) bound. This can get very large (N ~ 1e7-1e8) and become
-        # computationally expensive, even with N log N complexity. Instead of working in steps of 1 damage,
-        # we can work in higher steps of damage, like 100/1000/10000/etc, by interpolating the damage
-        # distributions to a coarser grid. This process is referred to as "coarsening".
-
-        # The major consideration for coarsening is when to coarsen and by how much.
-        # Coarsening leads to a greater reduction in computational efficiency when N becomes large.
-        # All action distributions are initially convolved in steps of 1 damage n_hit times.
-        # Unique action distributions are also convolved in steps of 1 damage, and then coarsened.
-
-        # The action with the smallest damage span will limit how much the support can be coarsened by.
-        # The auto-attacks of a WHM only span 10s of damage, but their Afflatus Misery action can span 10,000s.
-        # This is a somewhat unique case, which also makes the argument that auto-attacks can be ignored.
-        # By default, damage is discretized in steps of 250, which seemed to still give good accuracy.
-        # This also means that actions with very low damage spans are ignored, like healer auto attacks.
-        # This wont have a large impact on the rotation damage distribution.
-        # A future update might work on dynamically setting this value, or allow for different spacings,
-        # which are unified at the very end.
 
         # section (0), individual actions, just unpack from the action moments
         self.action_dps_support = [x.damage_support for x in self.action_moments]
@@ -933,7 +1009,9 @@ class Rotation:
         )
 
         self.rotation_dps_support = np.arange(
-            int(rotation_dps_support[1]), int(rotation_dps_support[-1]) + 0.5, step=0.5
+            int(rotation_dps_support[1]),
+            int(rotation_dps_support[-1]) + self.rotation_pdf_step,
+            step=self.rotation_pdf_step,
         )
         self.rotation_dps_distribution = np.interp(
             self.rotation_dps_support,
@@ -955,7 +1033,11 @@ class Rotation:
             )
             # Some actions like healer autos don't span a large DPS range and don't need to be coarsened.
             if upper - lower > 10:
-                new_action_support = np.arange(int(lower), int(upper) + 0.5, step=0.5)
+                new_action_support = np.arange(
+                    int(lower),
+                    int(upper) + self.action_pdf_step,
+                    step=self.action_pdf_step,
+                )
                 self.action_dps_distributions[idx] = np.interp(
                     new_action_support,
                     self.action_dps_support[idx] / self.t,
