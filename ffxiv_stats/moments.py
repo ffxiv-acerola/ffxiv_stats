@@ -276,10 +276,6 @@ class ActionMoments(Support):
         self.mean = self.get_action_mean()
         self.variance = self.get_action_variance()
         self.skewness = self.get_action_skewness()
-
-        # Convert from total damage to DPS
-        self.mean /= self.t
-        self.variance /= self.t**2
         self.standard_deviation = np.sqrt(self.variance)
 
         pass
@@ -495,13 +491,13 @@ class ActionMoments(Support):
 
     def get_action_mean(self):
         if self.compute_mgf:
-            return self._first_moment
+            return self._first_moment / self.t
         else:
             return np.trapz(self.dps_support * self.dps_distribution, self.dps_support)
 
     def get_action_variance(self):
         if self.compute_mgf:
-            return self._second_moment - self.mean**2
+            return (self._second_moment - self.mean**2) / self.t**2
         else:
             return np.trapz(
                 (self.dps_support - self.mean) ** 2 * self.dps_distribution,
@@ -706,7 +702,7 @@ class ActionMoments(Support):
         # is coarsened, it interpolates to 0's. There should be exactly 5 unique probabilities,
         # Normal, critical, direct, critical-direct, and 0. If not, just ignore gaps in the support.
         # This technically isn't normalized, but the PMF is normalized at the end.
-        if len(set(coarsened_one_hit_pmf)) < 5:
+        if len(set(coarsened_one_hit_pmf)) != len(set(one_hit_pmf)):
             # Mixture distribution defined with multinomial weights
             one_hit_pmf = np.zeros(max_roll - min_roll + 1)
             one_hit_pmf[normal_slice[0] : normal_slice[-1]] = (
