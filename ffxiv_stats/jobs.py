@@ -82,17 +82,7 @@ class BaseStats(Rotation):
         self.weapon_damage_multiplier = self.f_wd()
         pass
 
-    def attach_rotation(
-        self,
-        rotation_df,
-        t,
-        action_delta=10,
-        rotation_delta=100,
-        action_pdf_step=0.5,
-        rotation_pdf_step=0.5,
-        purge_action_moments=False,
-        compute_mgf=True,
-    ):
+    def attach_rotation(self, rotation_df, t, action_delta=10, rotation_delta=100):
         """
         Attach a rotation data frame and compute the corresponding DPS distribution.
 
@@ -181,14 +171,7 @@ class BaseStats(Rotation):
         rotation_df["is_dot"] = is_dot
 
         super().__init__(
-            rotation_df,
-            t,
-            action_delta=action_delta,
-            rotation_delta=rotation_delta,
-            action_pdf_step=action_pdf_step,
-            rotation_pdf_step=rotation_pdf_step,
-            purge_action_moments=purge_action_moments,
-            compute_mgf=compute_mgf,
+            rotation_df, t, action_delta=action_delta, rotation_delta=rotation_delta
         )
         pass
 
@@ -714,7 +697,7 @@ class PhysicalRanged(BaseStats):
         weapon_damage: int,
         delay: float,
         pet_attack_power: int = None,
-        pet_attack_power_scalar: float = 1.0,
+        pet_attack_power_scalar: float = 1.,
         pet_attack_power_offset: int = -61,
         pet_job_attribute: int = 100,
         pet_atk_mod: int = 195,
