@@ -26,8 +26,8 @@ class BaseStats(Rotation):
         pet_attack_power_scalar: int = None,
         pet_attack_power_offset: int = None,
         pet_job_attribute: int = 100,
-        pet_atk_mod: int = 195,
-        level: int = 90,
+        pet_atk_mod: int = 237,
+        level: int = 100,
     ) -> None:
         """
         Base class for converting potency to base damage dealt. Not meant to be used alone.
@@ -40,7 +40,7 @@ class BaseStats(Rotation):
         self.lvl_sub = level_mod[level]["lvl_sub"]
         self.lvl_div = level_mod[level]["lvl_div"]
         self.job_attribute = 115
-        self.atk_mod = 195
+        self.atk_mod = level_mod[level]["atk_mod"]
 
         self.main_stat = main_stat
         self.strength = strength
@@ -252,11 +252,17 @@ class BaseStats(Rotation):
         """
         return np.floor(140 * (self.det - self.lvl_main) / self.lvl_div + 1000)
 
-    def f_ten(self):
+    def f_ten(self, base_multiplier=112):
+        """Calculate tenacity damage multiplier.
+
+        Args:
+            base_multiplier (int, optional): Multiplier in tenacity formula.
+            In 7.0, this was updated to 112. Pre-7.0, its value was 100. 
+            If damage from before 7.0 is modeled, use a value of 100. Defaults to 112.
         """
-        Calculate tenacity damage multiplier.
-        """
-        return np.floor(100 * (self.tenacity - self.lvl_sub) / self.lvl_div + 1000)
+        return np.floor(
+            base_multiplier * (self.tenacity - self.lvl_sub) / self.lvl_div + 1000
+        )
 
     def f_speed_dot(self):
         """
@@ -475,7 +481,7 @@ class Healer(BaseStats):
         pet_attack_power_offset: int = 0,
         pet_job_attribute: int = 100,
         pet_atk_mod: int = 195,
-        level: int = 90,
+        level: int = 100,
         intelligence=None,
         dexterity=None,
         vit=None,
@@ -527,12 +533,6 @@ class Healer(BaseStats):
         )
 
         self.auto_trait = 100
-
-        if level == 90:
-            self.atk_mod = 195
-        if level == 80:
-            self.atk_mod = 165
-
         self.dot_speed_stat = spell_speed
         self.auto_speed_stat = 400
         self.add_role("Healer")
@@ -621,10 +621,7 @@ class Tank(BaseStats):
             )
 
         self.add_role("Tank")
-        if level == 90:
-            self.atk_mod = 156
-        if level == 80:
-            self.atk_mod = 115
+        self.atk_mod = level_mod[level]["atk_mod_tank"]
 
         self.dot_speed_stat = skill_speed
         self.auto_speed_stat = skill_speed
@@ -647,7 +644,7 @@ class MagicalRanged(BaseStats):
         pet_attack_power_offset: int = -48,
         pet_job_attribute: int = 100,
         pet_atk_mod: int = 195,
-        level: int = 90,
+        level: int = 100
     ) -> None:
         """Set stats specific to magical ranged, to compute damage from potency.
 
@@ -694,12 +691,6 @@ class MagicalRanged(BaseStats):
         self.auto_trait = 100
         self.dot_speed_stat = spell_speed
         self.auto_speed_stat = 400
-
-        if level == 90:
-            self.atk_mod = 195
-        if level == 80:
-            self.atk_mod = 165
-
         pass
 
 
@@ -718,7 +709,7 @@ class PhysicalRanged(BaseStats):
         pet_attack_power_offset: int = -61,
         pet_job_attribute: int = 100,
         pet_atk_mod: int = 195,
-        level: int = 90,
+        level: int = 100,
     ) -> None:
         """Set stats specific to Physical Ranged.
 
@@ -762,12 +753,6 @@ class PhysicalRanged(BaseStats):
         self.auto_trait = 100
         self.dot_speed_stat = skill_speed
         self.auto_speed_stat = skill_speed
-
-        if level == 90:
-            self.atk_mod = 195
-        if level == 80:
-            self.atk_mod = 165
-
         pass
 
 
@@ -787,7 +772,7 @@ class Melee(BaseStats):
         pet_attack_power_offset: int = 0,
         pet_job_attribute: int = 100,
         pet_atk_mod: int = 195,
-        level: int = 90,
+        level: int = 100,
     ) -> None:
         """
         Set melee-specific stats with this class like main stat, traits, etc.
@@ -832,17 +817,11 @@ class Melee(BaseStats):
         self.auto_trait = 100
         self.dot_speed_stat = skill_speed
         self.auto_speed_stat = skill_speed
-
-        if level == 90:
-            self.atk_mod = 195
-        if level == 80:
-            self.atk_mod = 165
-
         self.job = job
 
-        if job not in ("Monk", "Dragoon", "Reaper", "Ninja", "Samurai"):
+        if job not in ("Monk", "Dragoon", "Reaper", "Ninja", "Samurai", "Viper"):
             raise ValueError(
-                "Invalid job, accepted values are {'Monk', 'Dragoon', 'Reaper', 'Ninja', 'Samurai'}"
+                "Invalid job, accepted values are {'Monk', 'Dragoon', 'Reaper', 'Ninja', 'Samurai', 'Viper'}"
             )
 
         if job in ("Monk", "Ninja"):
@@ -850,6 +829,8 @@ class Melee(BaseStats):
         # But why
         elif job == "Samurai":
             self.job_attribute = 112
+        elif job == "Viper":
+            self.job_attribute = 100
         else:
             self.job_attribute = 115
 
@@ -857,4 +838,5 @@ class Melee(BaseStats):
 if __name__ == "__main__":
     # a = MagicalRanged(3369, 190, 2136, 500, 2399, 796, 132, 3.22, 3369)
     a = Melee(3360, 1697, 400, 2554, 1697, 132, 2.44, "Ninja", 3360, 1)
+    a = Healer(4145, 395, 2039, 686, 1733, 420, 137, 3.12, 4145, level=100)
     pass
