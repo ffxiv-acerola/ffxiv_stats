@@ -92,6 +92,7 @@ class BaseStats(Rotation):
         rotation_pdf_step=0.5,
         purge_action_moments=False,
         compute_mgf=True,
+        dawntrail_ten_modifier=True
     ):
         """
         Attach a rotation data frame and compute the corresponding DPS distribution.
@@ -123,6 +124,7 @@ class BaseStats(Rotation):
                        Larger values result in a faster calculation, but less accurate damage distributions.
         rotation_delta - Amount to discretize damage of unique actions by, for computing the rotation damage distribution.
                          Same rationale for actions, but just after all unique actions are grouped together.
+        dawntrail_ten_modifier - Whether to use the tenacity damage modifier updated as of Dawntrail (M = 112) or use the prior value (M = 100). This should only be set to False if you wish to model damage values before Dawntrail's release date. Tank damage at all levels after 2024-06-28 will use the updated multiplier. 
         """
         column_check = set(["potency", "damage_type"])
         missing_columns = column_check - set(rotation_df.columns)
@@ -130,6 +132,12 @@ class BaseStats(Rotation):
             raise ValueError(
                 f"The following column(s) are missing from `rotation_df`: {*missing_columns,}. Please refer to the docstring and add these field(s) or double check the spelling."
             )
+
+        # For analysis before Dawntrail, tenacity had a different multiplier
+        # Note this damage formula changed when Dawntrail was released and affects all levels.
+        # This should only be applied if you wish to model damage values before Dawntrail's release. 
+        if not dawntrail_ten_modifier:
+            self.tenacity_multiplier = self.f_ten(100)
 
         d2 = []
         is_dot = []
