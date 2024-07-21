@@ -4,7 +4,7 @@ from .modifiers import level_mod
 
 
 class Rate:
-    def __init__(self, crit_amt, dh_amt, level=90) -> None:
+    def __init__(self, crit_amt, dh_amt, level=100) -> None:
         """
         Get probabilities of different hit types given critical hit and direct hit rate stats.
         """

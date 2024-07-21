@@ -91,7 +91,7 @@ pet_defaults = {
             "pet_attack_power_scalar": 1.0,
             "pet_attack_power_offset": -61,
             "pet_job_attribute": 100,
-            "pet_atk_mod": 195,
+            "pet_atk_mod": 237,
         },
     },
 }
