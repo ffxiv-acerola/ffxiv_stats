@@ -488,7 +488,7 @@ class Healer(BaseStats):
         pet_attack_power_scalar: float = 1.058,
         pet_attack_power_offset: int = 0,
         pet_job_attribute: int = 100,
-        pet_atk_mod: int = 195,
+        pet_atk_mod: int = 237,
         level: int = 100,
         intelligence=None,
         dexterity=None,
@@ -573,7 +573,7 @@ class Tank(BaseStats):
         pet_attack_power_scalar: float = 1.0,
         pet_attack_power_offset: int = -18,
         pet_job_attribute: int = 100,
-        pet_atk_mod: int = 195,
+        pet_atk_mod: int = 237,
         level: int = 90,
     ) -> None:
         """Set tank stats, most notably the attack modifier.
@@ -649,9 +649,9 @@ class MagicalRanged(BaseStats):
         delay: float,
         pet_attack_power: int = None,
         pet_attack_power_scalar: float = 0.88,
-        pet_attack_power_offset: int = -48,
+        pet_attack_power_offset: int = -64,
         pet_job_attribute: int = 100,
-        pet_atk_mod: int = 195,
+        pet_atk_mod: int = 237,
         level: int = 100
     ) -> None:
         """Set stats specific to magical ranged, to compute damage from potency.
@@ -716,7 +716,7 @@ class PhysicalRanged(BaseStats):
         pet_attack_power_scalar: float = 1.0,
         pet_attack_power_offset: int = -61,
         pet_job_attribute: int = 100,
-        pet_atk_mod: int = 195,
+        pet_atk_mod: int = 237,
         level: int = 100,
     ) -> None:
         """Set stats specific to Physical Ranged.
@@ -779,7 +779,7 @@ class Melee(BaseStats):
         pet_attack_power_scalar: float = 1.0,
         pet_attack_power_offset: int = 0,
         pet_job_attribute: int = 100,
-        pet_atk_mod: int = 195,
+        pet_atk_mod: int = 237,
         level: int = 100,
     ) -> None:
         """
