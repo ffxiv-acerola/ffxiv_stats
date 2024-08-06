@@ -1,6 +1,6 @@
 import numpy as np
 
-from .modifiers import level_mod
+from ffxiv_stats.modifiers import level_mod
 
 
 class Rate:
@@ -133,7 +133,7 @@ class Rate:
         buffed_crit_rate = round(unbuffed_crit_rate + buff_crit_rate, 3)
 
         crit_buff = 1 + (
-            (buffed_crit_rate - unbuffed_crit_rate) * (unbuffed_crit_rate + 0.35)
+            (buffed_crit_rate - unbuffed_crit_rate) * (unbuffed_crit_rate + 0.4)
         )
 
         if guaranteed_hit_type == 1:

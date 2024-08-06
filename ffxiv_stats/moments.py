@@ -627,6 +627,18 @@ class ActionMoments(Support):
             int
         )
 
+        # Excluding gaps for now, this is causing a lot of issues.
+        normal_range = (self.normal_supp - self.normal_supp[0]).astype(int)
+        normal_slice = np.arange(normal_range.min(), normal_range.max() + 1, step=1)
+
+        ch_range = (self.crit_supp - self.crit_supp[0] + ch_offset).astype(int)
+        ch_slice = np.arange(ch_range.min(), ch_range.max() + 1, step=1)
+
+        dh_range = (self.dir_supp - self.dir_supp[0] + dh_offset).astype(int)
+        dh_slice = np.arange(dh_range.min(), dh_range.max() + 1, step=1)
+    
+        cdh_range = (self.crit_dir_supp - self.crit_dir_supp[0] + cdh_offset).astype(int)
+        cdh_slice = np.arange(cdh_range.min(), cdh_range.max() + 1, step=1)
         # Mixture distribution defined with multinomial weights
         one_hit_pmf = np.zeros(max_roll - min_roll + 1)
         one_hit_pmf[normal_slice] = self.p[0] / self.normal_supp.size

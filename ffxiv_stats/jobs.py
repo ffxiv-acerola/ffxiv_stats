@@ -3,8 +3,8 @@ from numpy import floor as nf
 
 from warnings import warn
 
-from .moments import Rotation
-from .modifiers import level_mod
+from ffxiv_stats.moments import Rotation
+from ffxiv_stats.modifiers import level_mod
 
 
 class BaseStats(Rotation):
@@ -832,13 +832,11 @@ class Melee(BaseStats):
                 "Invalid job, accepted values are {'Monk', 'Dragoon', 'Reaper', 'Ninja', 'Samurai', 'Viper'}"
             )
 
-        if job in ("Monk", "Ninja"):
+        if job in ("Monk", "Ninja", "Viper"):
             self.job_attribute = 110
         # But why
         elif job == "Samurai":
             self.job_attribute = 112
-        elif job == "Viper":
-            self.job_attribute = 100
         else:
             self.job_attribute = 115
 
