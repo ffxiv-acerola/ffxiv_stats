@@ -605,7 +605,12 @@ class ActionMoments(Support):
                     convolve_dict[partition_set[a + 1]] = fftconvolve(
                         convolve_dict[partition_set[0]], convolve_dict[partition_set[a]]
                     )
-
+                
+                # Normalize, values can have numerical stability issues if 
+                # N > ~200
+                convolve_dict[partition_set[a + 1]] /= np.trapz(
+                    convolve_dict[partition_set[a + 1]]
+                )
             return convolve_dict[n]
 
         # Define the bounds of the mixture distribution (lowest roll NH and highest roll CDH)
@@ -636,8 +641,10 @@ class ActionMoments(Support):
 
         dh_range = (self.dir_supp - self.dir_supp[0] + dh_offset).astype(int)
         dh_slice = np.arange(dh_range.min(), dh_range.max() + 1, step=1)
-    
-        cdh_range = (self.crit_dir_supp - self.crit_dir_supp[0] + cdh_offset).astype(int)
+
+        cdh_range = (self.crit_dir_supp - self.crit_dir_supp[0] + cdh_offset).astype(
+            int
+        )
         cdh_slice = np.arange(cdh_range.min(), cdh_range.max() + 1, step=1)
         # Mixture distribution defined with multinomial weights
         one_hit_pmf = np.zeros(max_roll - min_roll + 1)
@@ -732,7 +739,10 @@ class ActionMoments(Support):
 
         conv_pmf = convolve_by_partitions(coarsened_one_hit_pmf, self.n)
 
-        return coarsened_n_hit_support, conv_pmf
+        # Ensure distribution is normalized.
+        return coarsened_n_hit_support, conv_pmf / np.trapz(
+            conv_pmf, coarsened_n_hit_support
+        )
 
 
 class Rotation:
@@ -784,10 +794,10 @@ class Rotation:
                             but can be changed to larger values if total damage dealt is being computed.
         action_pdf_step - final step size used when reported `self.action_dps_support/distributions` and `self.unique_actions_support/distribution`.
                           Defaults to a value of 1 but can be changed to larger values if total damage dealt is being computed.
-        purge_action_moments - Keeping track of uncoarsened action distributions for full fight rotations can take up a moderate amount of memory / 
-                               disk space when pickled due to array size. "Purging" these removes them  to reduce resource requirements. 
-                               These are largely intermediate variables for calculating # more familiar values - people are generally interested 
-                               in the DPS distribution for all broil IV  casts, not the individual DPS distributions for Broil IV, 
+        purge_action_moments - Keeping track of uncoarsened action distributions for full fight rotations can take up a moderate amount of memory /
+                               disk space when pickled due to array size. "Purging" these removes them  to reduce resource requirements.
+                               These are largely intermediate variables for calculating # more familiar values - people are generally interested
+                               in the DPS distribution for all broil IV  casts, not the individual DPS distributions for Broil IV,
                                Broil IV with Chain and Tech, and Broil IV with tech but not chain.
         """
         column_check = set(["base_action", "action_name"])
@@ -835,7 +845,6 @@ class Rotation:
         ) / np.sum(self.action_variances) ** (3 / 2)
 
         self.compute_dps_distributions()
-
 
         if self.purge_action_moments:
             self.action_moments = [None] * len(self.action_moments)
