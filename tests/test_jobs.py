@@ -7,7 +7,7 @@ from ffxiv_stats.jobs import Healer, MagicalRanged, Melee, PhysicalRanged, Tank
 from ffxiv_stats.modifiers import pet_defaults
 from ffxiv_stats.rate import Rate
 
-test_data_path = Path("ffxiv_stats/tests/data/dawntrail")
+test_data_path = Path("tests/data/dawntrail")
 
 
 class TestDawntrailDamage:
