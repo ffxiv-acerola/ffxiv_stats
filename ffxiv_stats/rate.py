@@ -103,6 +103,56 @@ class Rate:
             ]
         )
 
+    def _guaranteed_critical_damage_multiplier(self, buff_crit_rate: float) -> float:
+        """Damage bonus due to critical hit buffs present on a guaranteed critical hit.
+
+        Args:
+            buff_crit_rate (float): Amount the critical hit rate is buffed by. A 20% critical hit rate buff would be 0.20
+
+        Returns:
+            float: Damage multiplier
+        """
+        return round(1 + ((self.l_c / 1000 - 1) * buff_crit_rate), 3)
+
+    def _guaranteed_direct_damage_multiplier(
+        self, buff_dh_rate: float, determination: int, direct_hit_multiplier: float = 1.25
+    ) -> float:
+        """Damage bonus due to direct hit rate buffs present on a guaranteed direct hit.
+
+        This is expressed in two components: (i) a direct hit rate component and (ii) determination component.
+
+        The direct hit rate component depends on the magnitude of the direct hit rate buff.
+
+        The determination component treats the direct hit rate stat as a bonus determination multiplier,
+        
+        f_det|adh = f_det + f_det(dh)
+
+        Where f_det(dh) is computed using the formula for f_det but using the direct hit stat in lieu of determination. This will be present even if a guaranteed direct hit does not have a direct hit rate buff. The returned buff strength factors out the original 
+
+        Args:
+            buff_dh_rate (float): Amount the direct hit rate is buffed by. A 20% direct hit rate buff would be 0.2.
+            direct_hit_multiplier (float, optional): Buff strength of a direct hit. Defaults to 1.25.
+
+        Returns:
+            float: Damage multiplier with new tenacity multiplier.
+        """
+
+        # Create a new determination multiplier with DH added, f_detDH
+        dh_det_bonus = (
+            1 + np.floor(140 * ((self.dh_amt - self.lvl_sub) / self.lvl_div)) / 1000
+        )
+        # If f_detDH is used as is, the determination multiplier would be double counted when potency is converted to damage.
+        # Compute the normal f_det and divide it out.
+
+        # Since Damage ~ potency * f_atk * f_det * buff_1 * ... * buff_n,
+        # this is computing buff_i = f_detDH * buff_autoDH / f _det, so
+        # Damage ~ potency * f_atk * f_detDH * buff_autoDH
+        # Yeah, this can pry be done better.
+        base_det = np.floor(140 * ((determination - self.lvl_sub) / self.lvl_div)) / 1000
+
+        dh_bonus = 1 + buff_dh_rate * (direct_hit_multiplier - 1.0)
+        return round((dh_det_bonus + base_det) / (1 + base_det) * dh_bonus, 3)
+
     def get_hit_type_damage_buff(
         self,
         guaranteed_hit_type=0,
@@ -125,41 +175,18 @@ class Rate:
                        as the direct hit rate stat gets added to the determination stat
                        to create and effective determination multiplier.
         """
+        crit_buff = 1.0
+        dh_buff = 1.0
+
         if guaranteed_hit_type == 0:
-            return 1
+            return 1.0
 
-        # Damage buff for crit rate buff
-        unbuffed_crit_rate = self.crit_prob()
-        buffed_crit_rate = round(unbuffed_crit_rate + buff_crit_rate, 3)
+        if guaranteed_hit_type in (1, 3):
+            crit_buff = self._guaranteed_critical_damage_multiplier(buff_crit_rate)
 
-        crit_buff = 1 + (
-            (buffed_crit_rate - unbuffed_crit_rate) * (unbuffed_crit_rate + 0.4)
-        )
+        if guaranteed_hit_type in (2, 3):
+            dh_buff = self._guaranteed_direct_damage_multiplier(buff_dh_rate, determination)
 
-        if guaranteed_hit_type == 1:
-            return crit_buff
-
-        # Damage buff for direct hit rate buff
-        unbuffed_dh_rate = self.direct_hit_prob()
-        buffed_dh_rate = round(unbuffed_dh_rate + buff_dh_rate, 3)
-
-        if determination is None:
-            raise ValueError(
-                "Determination stat value must be specified because Direct Hit rate buffs depend on the base Determination stat"
-            )
-
-        dh_buff = 1 + ((buffed_dh_rate - unbuffed_dh_rate) * 0.25)
-        # Add DH rate to determination stat for new effective det multiplier
-        det_and_dh_amt = (determination - self.lvl_main) + (self.dh_amt - self.lvl_sub)
-        dh_buff *= np.floor(((140 * (det_and_dh_amt)) / self.lvl_div) + 1000) / 1000
-        # Divide out the original determination multiplier so it isn't double counted.
-        dh_buff /= (
-            np.floor(((140 * (determination - self.lvl_main)) / self.lvl_div) + 1000)
-        ) / 1000
-
-        dh_buff = round(dh_buff, 6)
-        # Works for either guaranteed direct hits or guaranteed critical-direct hits
-        # for the former, crit_buff = 1
         return round(crit_buff * dh_buff, 6)
 
 

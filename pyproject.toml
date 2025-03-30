@@ -1,21 +1,26 @@
-[build-system]
-requires = ["flit_core >=3.2,<4"]
-build-backend = "flit_core.buildapi"
-
-[project]
+[tool.poetry]
 name = "ffxiv_stats"
-authors = [{name = "Acerola Paracletus", email = "ffxivacerola@gmail.com"}]
+version = "0.6.0"
+description = "A stats analysis tool for FFXIV."
+authors = ["Acerola Paracletus <ffxivacerola@gmail.com>"]
+license = "Apache-2.0"
 readme = "README.md"
-license = {file = "LICENSE"}
-classifiers = ["License :: OSI Approved :: Apache Software License"]
-requires-python = ">=3.8"
-dynamic = ["version", "description"]
-dependencies = [    
-    'numpy >= 1.20.2',
-    'matplotlib >= 3.4.2', 
-    'pandas >= 2.0.0',
-    'scipy >= 1.6.3'
-    ]
-    
-[project.urls]
+
+[tool.poetry.dependencies]
+python = ">=3.9"
+numpy = ">=1.20.2"
+matplotlib = ">=3.4.2"
+pandas = ">=2.0.0"
+scipy = ">=1.6.3"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
+ipykernel = "^6.29.5"
+pytest-cov = "^6.0.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.urls]
 Home = "https://github.com/ffxiv-acerola/ffxiv_stats"
