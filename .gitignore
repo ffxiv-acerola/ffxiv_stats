@@ -9,3 +9,4 @@ dist/*
 
 # Runtime
 __pycache__/
+.coverage
