@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ffxiv_stats"
-version = "0.6.0"
+version = "1.0.0"
 description = "A stats analysis tool for FFXIV."
 authors = ["Acerola Paracletus <ffxivacerola@gmail.com>"]
 license = "Apache-2.0"
